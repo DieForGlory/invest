@@ -1,13 +1,14 @@
-# forms.py
+# app/web/forms.py
 
 from datetime import date
 from flask_wtf import FlaskForm
 from wtforms import (StringField, PasswordField, SubmitField, FileField, SelectField,
-                     SelectMultipleField, TextAreaField, IntegerField, FloatField)
+                     SelectMultipleField, TextAreaField, IntegerField, FloatField, BooleanField)
 from wtforms.validators import DataRequired, Length, EqualTo, ValidationError, Email, NumberRange, Optional, Regexp
 from wtforms.widgets import CheckboxInput
 from ..models import auth_models
 from flask_babel import lazy_gettext as _
+
 
 class CreateCompanyForm(FlaskForm):
     """Форма для создания новой компании (суперадмином)."""
@@ -15,19 +16,30 @@ class CreateCompanyForm(FlaskForm):
     subdomain = StringField('Поддомен (латиницей, без пробелов)', validators=[
         DataRequired(),
         Length(min=2, max=60),
-        Regexp('^[a-z0-9_]+$', message='Поддомен может содержать только строчные латинские буквы, цифры и подчеркивания.')
+        Regexp('^[a-z0-9_]+$',
+               message='Поддомен может содержать только строчные латинские буквы, цифры и подчеркивания.')
     ])
-    db_host = StringField('Хост БД (например, 127.0.0.1)', validators=[DataRequired()])
-    db_name = StringField('Имя БД', validators=[DataRequired()])
-    db_user = StringField('Пользователь БД', validators=[DataRequired()])
-    db_password = PasswordField('Пароль БД', validators=[DataRequired()])
+
+    # --- ВОЗВРАЩЕНЫ ПОЛЯ ДЛЯ MYSQL ---
+    db_host = StringField('Хост MySQL (например, 172.16.0.199:9906)', validators=[DataRequired()])
+    db_name = StringField('Имя БД в MySQL', validators=[DataRequired()])
+    db_user = StringField('Пользователь MySQL (read-only)', validators=[DataRequired()])
+    db_password = PasswordField('Пароль от пользователя MySQL', validators=[DataRequired()])
+
+    # --- Поля для почты ---
+    mail_server = StringField('SMTP Сервер', validators=[DataRequired()], default='mail.gh.uz')
+    mail_port = IntegerField('SMTP Порт', validators=[DataRequired()], default=587)
+    mail_use_tls = BooleanField('Использовать TLS', default=True)
+    mail_username = StringField('Логин (email) от почты', validators=[DataRequired(), Email()], default='robot@gh.uz')
+    mail_password = PasswordField('Пароль от почты', validators=[DataRequired()])
+
     submit = SubmitField('Создать компанию')
 
     def validate_subdomain(self, subdomain):
-        """Проверка, что поддомен еще не занят."""
         if auth_models.Company.query.filter_by(subdomain=subdomain.data).first():
             raise ValidationError('Этот поддомен уже используется.')
 
+# ... (остальные формы без изменений)
 class UploadExcelForm(FlaskForm):
     """Форма для загрузки Excel файла."""
     excel_file = FileField(

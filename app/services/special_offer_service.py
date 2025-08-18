@@ -92,7 +92,7 @@ def get_active_special_offers():
     }
 
     # --- Шаг 1: Получаем все активные спецпредложения из 'planning.db' ---
-    active_specials = g.company_db_session.query(planning_models.DiscountVersion).filter_by(
+    active_specials = g.company_db_session.query(MonthlySpecial).filter(
         MonthlySpecial.is_active == True,
         MonthlySpecial.expires_at >= today
     ).order_by(MonthlySpecial.created_at.desc()).all()
@@ -104,7 +104,7 @@ def get_active_special_offers():
     sell_ids = list(specials_map.keys())
 
     # --- Шаг 2: Получаем квартиры из основной базы ---
-    sells_data = g.company_db_session.query(
+    sells_data = g.mysql_db_session.query(
         EstateSell, EstateHouse
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
@@ -167,7 +167,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     """Возвращает полную информацию по одному спец. предложению ПО ЕГО ID. (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
 
     # --- Шаг 1: Находим спецпредложение по его собственному ID в 'planning.db' ---
-    special = MonthlySpecial.query.get(special_id)
+    special = g.company_db_session.query(MonthlySpecial).get(special_id)
     if not special:
         return None
 
@@ -186,7 +186,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     }
 
     # --- Шаг 2: Получаем детали квартиры из основной базы ---
-    sell_data = g.company_db_session.query(EstateSell, EstateHouse).join(EstateHouse,
+    sell_data = g.mysql_db_session.query(EstateSell, EstateHouse).join(EstateHouse,
                                                                EstateSell.house_id == EstateHouse.id).filter(
         EstateSell.id == sell_id).first()
     if not sell_data:
@@ -236,7 +236,7 @@ def get_special_offer_details_by_special_id(special_id: int):
 def get_all_special_offers():
     """Возвращает ВСЕ спец. предложения для панели администратора. (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
     # Шаг 1: Получаем ВСЕ спецпредложения из 'planning.db'
-    all_specials_from_db = MonthlySpecial.query.order_by(MonthlySpecial.created_at.desc()).all()
+    all_specials_from_db = g.company_db_session.query(MonthlySpecial).order_by(MonthlySpecial.created_at.desc()).all()
 
     if not all_specials_from_db:
         return []
@@ -279,7 +279,7 @@ def get_all_special_offers():
 
 def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
     """Обновляет существующее специальное предложение."""
-    special_to_update = MonthlySpecial.query.get_or_404(special_id)
+    special_to_update = g.company_db_session.query(MonthlySpecial).get_or_404(special_id)
 
     special_to_update.usp_text = usp_text
     special_to_update.extra_discount = extra_discount

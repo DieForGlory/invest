@@ -1,4 +1,3 @@
-# app/services/report_service.py
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
@@ -38,7 +37,7 @@ def generate_consolidated_report_by_period(year: int, period: str, property_type
     # Цикл по месяцам в выбранном периоде
     for month in months_in_period:
         # Получаем стандартный отчет за один месяц
-        monthly_data, monthly_totals = generate_plan_fact_report(year, month, property_type)
+        monthly_data, monthly_totals, _ = generate_plan_fact_report(year, month, property_type)
 
         # Суммируем данные по каждому проекту
         for project_row in monthly_data:
@@ -86,8 +85,8 @@ def generate_consolidated_report_by_period(year: int, period: str, property_type
     return final_report_data, dict(aggregated_totals)
 
 def get_fact_income_data(year: int, month: int, property_type: str):
-    """Собирает ФАКТИЧЕСКИЕ поступления (статус 'Проведено')."""
-    results = g.company_db_session.query(
+    """Собирает ФАКТИЧЕСКИЕ поступления (статус 'Проведено') из MySQL."""
+    results = g.mysql_db_session.query(
         EstateHouse.complex_name, func.sum(FinanceOperation.summa).label('fact_income')
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
@@ -104,9 +103,9 @@ def get_fact_income_data(year: int, month: int, property_type: str):
 
 def get_expected_income_data(year: int, month: int, property_type: str):
     """
-    Собирает ОЖИДАЕМЫЕ поступления (ИСКЛЮЧАЯ возвраты), их сумму и ID операций.
+    Собирает ОЖИДАЕМЫЕ поступления из MySQL.
     """
-    results = g.company_db_session.query(
+    results = g.mysql_db_session.query(
         EstateHouse.complex_name,
         func.sum(FinanceOperation.summa).label('expected_income'),
         func.group_concat(FinanceOperation.id).label('income_ids')
@@ -117,7 +116,6 @@ def get_expected_income_data(year: int, month: int, property_type: str):
         extract('year', FinanceOperation.date_to) == year,
         extract('month', FinanceOperation.date_to) == month,
         EstateSell.estate_sell_category == property_type,
-        # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: Исключаем возвраты ---
         FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
     ).group_by(EstateHouse.complex_name).all()
 
@@ -126,11 +124,12 @@ def get_expected_income_data(year: int, month: int, property_type: str):
         ids = [int(id_str) for id_str in row.income_ids.split(',')] if row.income_ids else []
         data[row.complex_name] = {'sum': row.expected_income or 0, 'ids': ids}
     return data
+
 def get_refund_data(year: int, month: int, property_type: str):
     """
-    Собирает данные по ВОЗВРАТАМ, запланированным на указанный период.
+    Собирает данные по ВОЗВРАТАМ из MySQL.
     """
-    results = g.company_db_session.query(
+    results = g.mysql_db_session.query(
         func.sum(FinanceOperation.summa).label('total_refunds')
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .filter(
@@ -139,12 +138,12 @@ def get_refund_data(year: int, month: int, property_type: str):
         extract('month', FinanceOperation.date_to) == month,
         EstateSell.estate_sell_category == property_type,
         FinanceOperation.payment_type == "Возврат поступлений при отмене сделки"
-    ).scalar() # Получаем одно значение
+    ).scalar()
 
     return results or 0.0
 
 def get_plan_income_data(year: int, month: int, property_type: str):
-    """Получает плановые данные по поступлениям."""
+    """Получает плановые данные по поступлениям из локальной SQLite."""
     results = g.company_db_session.query(planning_models.SalesPlan).filter_by(year=year, month=month, property_type=property_type).all()
     return {row.complex_name: row.plan_income for row in results}
 
@@ -164,11 +163,9 @@ def generate_ids_excel(ids_str: str):
     return output
 
 def get_fact_data(year: int, month: int, property_type: str):
-    """Собирает фактические данные о продажах из БД."""
-
+    """Собирает фактические данные о продажах из MySQL."""
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-
-    query = g.company_db_session.query(
+    query = g.mysql_db_session.query(
         EstateHouse.complex_name,
         func.count(EstateDeal.id).label('fact_units')
     ).join(
@@ -181,14 +178,11 @@ def get_fact_data(year: int, month: int, property_type: str):
         extract('month', effective_date) == month,
         EstateSell.estate_sell_category == property_type
     ).group_by(EstateHouse.complex_name)
-
     results = query.all()
-
     return {row.complex_name: row.fact_units for row in results}
 
-
 def get_plan_data(year: int, month: int, property_type: str):
-    """Получает плановые данные из нашей таблицы SalesPlan."""
+    """Получает плановые данные из локальной SQLite."""
     results = g.company_db_session.query(planning_models.SalesPlan).filter_by(
         year=year, month=month, property_type=property_type
     ).all()
@@ -204,8 +198,6 @@ def generate_plan_fact_report(year: int, month: int, property_type: str):
     plan_income_data = get_plan_income_data(year, month, property_type)
     fact_income_data = get_fact_income_data(year, month, property_type)
     all_expected_income_data = get_expected_income_data(year, month, property_type)
-
-    # --- НОВОЕ: Получаем данные по возвратам ---
     total_refunds = get_refund_data(year, month, property_type)
 
     all_complexes = sorted(
@@ -260,22 +252,17 @@ def generate_plan_fact_report(year: int, month: int, property_type: str):
             'expected_income': complex_expected_income
         })
 
-    totals['percent_fact_units'] = (totals['fact_units'] / totals['plan_units']) * 100 if totals[
-                                                                                              'plan_units'] > 0 else 0
-    totals['forecast_units'] = ((totals['fact_units'] / passed_workdays) * workdays_in_month / totals[
-        'plan_units']) * 100 if totals['plan_units'] > 0 else 0
-    totals['percent_fact_volume'] = (totals['fact_volume'] / totals['plan_volume']) * 100 if totals[
-                                                                                                 'plan_volume'] > 0 else 0
-    totals['forecast_volume'] = ((totals['fact_volume'] / passed_workdays) * workdays_in_month / totals[
-        'plan_volume']) * 100 if totals['plan_volume'] > 0 else 0
-    totals['percent_fact_income'] = (totals['fact_income'] / totals['plan_income']) * 100 if totals[
-                                                                                                 'plan_income'] > 0 else 0
+    totals['percent_fact_units'] = (totals['fact_units'] / totals['plan_units']) * 100 if totals['plan_units'] > 0 else 0
+    totals['forecast_units'] = ((totals['fact_units'] / passed_workdays) * workdays_in_month / totals['plan_units']) * 100 if totals['plan_units'] > 0 else 0
+    totals['percent_fact_volume'] = (totals['fact_volume'] / totals['plan_volume']) * 100 if totals['plan_volume'] > 0 else 0
+    totals['forecast_volume'] = ((totals['fact_volume'] / passed_workdays) * workdays_in_month / totals['plan_volume']) * 100 if totals['plan_volume'] > 0 else 0
+    totals['percent_fact_income'] = (totals['fact_income'] / totals['plan_income']) * 100 if totals['plan_income'] > 0 else 0
 
-    # --- НОВОЕ: Возвращаем также сумму возвратов ---
     return report_data, totals, total_refunds
 
 
 def process_plan_from_excel(file_path: str, year: int, month: int):
+    """Записывает планы в локальную SQLite."""
     df = pd.read_excel(file_path)
     for index, row in df.iterrows():
         plan_entry = g.company_db_session.query(planning_models.SalesPlan).filter_by(
@@ -293,8 +280,8 @@ def process_plan_from_excel(file_path: str, year: int, month: int):
 
 
 def generate_plan_template_excel():
+    """Генерирует шаблон, используя названия ЖК из MySQL."""
     complex_names = get_all_complex_names()
-    # Используем planning_models.PropertyType
     property_types = list(planning_models.PropertyType)
     headers = ['ЖК', 'Тип недвижимости', 'План, шт', 'План контрактации, UZS', 'План поступлений, UZS']
     data = [{'ЖК': name, 'Тип недвижимости': prop_type.value, 'План, шт': 0, 'План контрактации, UZS': 0,
@@ -307,9 +294,7 @@ def generate_plan_template_excel():
 
 
 def get_monthly_summary_by_property_type(year: int, month: int):
-    """
-    Собирает сводку по каждому типу недвижимости, включая ID для ссылок.
-    """
+    """Собирает сводку, комбинируя данные из SQLite (планы) и MySQL (факты)."""
     summary_data = []
     property_types = list(planning_models.PropertyType)
     today = date.today()
@@ -326,23 +311,17 @@ def get_monthly_summary_by_property_type(year: int, month: int):
         total_fact_volume = sum(get_fact_volume_data(year, month, prop_type.value).values())
         total_plan_income = sum(get_plan_income_data(year, month, prop_type.value).values())
         total_fact_income = sum(get_fact_income_data(year, month, prop_type.value).values())
-
-        # --- ИЗМЕНЕНИЕ: Собираем и сумму, и ID ---
         expected_income_data = get_expected_income_data(year, month, prop_type.value)
         total_expected_income_sum = sum(v['sum'] for v in expected_income_data.values())
         total_expected_income_ids = [id_val for v in expected_income_data.values() for id_val in v['ids']]
-        # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-        if (
-                total_plan_units + total_fact_units + total_plan_volume + total_fact_volume + total_plan_income + total_fact_income) == 0:
+        if (total_plan_units + total_fact_units + total_plan_volume + total_fact_volume + total_plan_income + total_fact_income) == 0:
             continue
 
         percent_fact_units = (total_fact_units / total_plan_units) * 100 if total_plan_units > 0 else 0
-        forecast_units = ((
-                                      total_fact_units / passed_workdays) * workdays_in_month / total_plan_units) * 100 if total_plan_units > 0 else 0
+        forecast_units = ((total_fact_units / passed_workdays) * workdays_in_month / total_plan_units) * 100 if total_plan_units > 0 else 0
         percent_fact_volume = (total_fact_volume / total_plan_volume) * 100 if total_plan_volume > 0 else 0
-        forecast_volume = ((
-                                       total_fact_volume / passed_workdays) * workdays_in_month / total_plan_volume) * 100 if total_plan_volume > 0 else 0
+        forecast_volume = ((total_fact_volume / passed_workdays) * workdays_in_month / total_plan_volume) * 100 if total_plan_volume > 0 else 0
         percent_fact_income = (total_fact_income / total_plan_income) * 100 if total_plan_income > 0 else 0
 
         summary_data.append({
@@ -358,7 +337,6 @@ def get_monthly_summary_by_property_type(year: int, month: int):
             'total_plan_income': total_plan_income,
             'total_fact_income': total_fact_income,
             'percent_fact_income': percent_fact_income,
-            # --- ИЗМЕНЕНИЕ: Сохраняем в правильной структуре ---
             'total_expected_income': {
                 'sum': total_expected_income_sum,
                 'ids': total_expected_income_ids
@@ -368,8 +346,9 @@ def get_monthly_summary_by_property_type(year: int, month: int):
 
 
 def get_fact_volume_data(year: int, month: int, property_type: str):
+    """Собирает фактические данные об объеме контрактации из MySQL."""
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    results = g.company_db_session.query(
+    results = g.mysql_db_session.query(
         EstateHouse.complex_name, func.sum(EstateDeal.deal_sum).label('fact_volume')
     ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id).join(EstateHouse,
                                                                         EstateSell.house_id == EstateHouse.id).filter(
@@ -382,40 +361,214 @@ def get_fact_volume_data(year: int, month: int, property_type: str):
 
 
 def get_plan_volume_data(year: int, month: int, property_type: str):
-    """Получает плановые данные по объему контрактации."""
-    # Используем planning_models.SalesPlan
+    """Получает плановые данные по объему контрактации из локальной SQLite."""
     results = g.company_db_session.query(planning_models.SalesPlan).filter_by(year=year, month=month, property_type=property_type).all()
     return {row.complex_name: row.plan_volume for row in results}
 
 
+def generate_plan_fact_excel(year: int, month: int, property_type: str):
+    """
+    Генерирует Excel-файл с детальным план-фактным отчетом.
+    """
+    report_data, totals, total_refunds = generate_plan_fact_report(year, month, property_type)
+
+    if not report_data:
+        return None
+
+    df = pd.DataFrame(report_data)
+    totals_df = pd.DataFrame([totals])
+
+    ordered_columns = [
+        'complex_name',
+        'plan_units', 'fact_units', 'percent_fact_units', 'forecast_units',
+        'plan_volume', 'fact_volume', 'percent_fact_volume', 'forecast_volume',
+        'plan_income', 'fact_income', 'percent_fact_income', 'expected_income'
+    ]
+
+    renamed_columns = [
+        'Проект',
+        'План, шт', 'Факт, шт', '% Факт, шт', '% Прогноз, шт',
+        'План контрактации', 'Факт контрактации', '% Факт контр.', '% Прогноз контр.',
+        'План поступлений', 'Факт поступлений', '% Факт поступл.', 'Ожидаемые поступл.'
+    ]
+
+    df['expected_income'] = df['expected_income'].apply(lambda x: x['sum'])
+    df = df[ordered_columns]
+
+    totals_df = totals_df[[col for col in ordered_columns if col != 'complex_name']]
+    totals_df.insert(0, 'complex_name', f'Итого ({property_type})')
+
+    final_df = pd.concat([df, totals_df], ignore_index=True)
+    final_df.columns = renamed_columns
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        final_df.to_excel(writer, index=False, sheet_name=f'План-факт {month:02d}-{year}')
+
+    output.seek(0)
+    return output
+
+
+def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_type: str = None):
+    """
+    Рассчитывает годовые фактические метрики (объем и поступления) из MySQL
+    с разбивкой по месяцам для ОДНОГО ЖК.
+    """
+    house = g.mysql_db_session.query(EstateHouse).filter_by(complex_name=complex_name).first()
+    if not house:
+        return {'volume': [0] * 12, 'income': [0] * 12}
+
+    fact_volume_by_month = [0] * 12
+    fact_income_by_month = [0] * 12
+    sold_statuses = ["Сделка в работе", "Сделка проведена"]
+
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    volume_query = g.mysql_db_session.query(
+        extract('month', effective_date).label('month'),
+        func.sum(EstateDeal.deal_sum).label('total')
+    ).join(EstateSell).filter(
+        EstateSell.house_id == house.id,
+        EstateDeal.deal_status_name.in_(sold_statuses),
+        extract('year', effective_date) == year
+    )
+    if property_type:
+        volume_query = volume_query.filter(EstateSell.estate_sell_category == property_type)
+
+    for row in volume_query.group_by('month').all():
+        fact_volume_by_month[row.month - 1] = row.total or 0
+
+    income_query = g.mysql_db_session.query(
+        extract('month', FinanceOperation.date_added).label('month'),
+        func.sum(FinanceOperation.summa).label('total')
+    ).join(EstateSell).filter(
+        EstateSell.house_id == house.id,
+        FinanceOperation.status_name == 'Проведено',
+        extract('year', FinanceOperation.date_added) == year
+    )
+    if property_type:
+        income_query = income_query.filter(EstateSell.estate_sell_category == property_type)
+
+    for row in income_query.group_by('month').all():
+        fact_income_by_month[row.month - 1] = row.total or 0
+
+    return {'volume': fact_volume_by_month, 'income': fact_income_by_month}
+
+
+def get_price_dynamics_data(complex_name: str, property_type: str = None):
+    """
+    Рассчитывает динамику средней фактической цены продажи за м² по месяцам из MySQL.
+    """
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+
+    query = g.mysql_db_session.query(
+        extract('year', effective_date).label('deal_year'),
+        extract('month', effective_date).label('deal_month'),
+        (EstateDeal.deal_sum / EstateSell.estate_area).label('price_per_sqm')
+    ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
+        .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
+        .filter(
+        effective_date.isnot(None),
+        EstateHouse.complex_name == complex_name,
+        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
+        EstateSell.estate_area.isnot(None),
+        EstateSell.estate_area > 0,
+        EstateDeal.deal_sum.isnot(None),
+        EstateDeal.deal_sum > 0
+    )
+
+    if property_type:
+        query = query.filter(EstateSell.estate_sell_category == property_type)
+
+    subquery = query.subquery()
+    monthly_avg_query = g.mysql_db_session.query(
+        subquery.c.deal_year,
+        subquery.c.deal_month,
+        func.avg(subquery.c.price_per_sqm).label('avg_price')
+    ).group_by(subquery.c.deal_year, subquery.c.deal_month) \
+        .order_by(subquery.c.deal_year, subquery.c.deal_month)
+
+    results = monthly_avg_query.all()
+
+    price_dynamics = {
+        "labels": [],
+        "data": []
+    }
+    for row in results:
+        price_dynamics["labels"].append(f"{int(row.deal_month):02d}.{int(row.deal_year)}")
+        price_dynamics["data"].append(row.avg_price)
+
+    return price_dynamics
+
+
+def calculate_grand_totals(year, month):
+    """
+    Рассчитывает общие итоговые показатели, включая ID для ссылок.
+    """
+    summary_by_type = get_monthly_summary_by_property_type(year, month)
+
+    if not summary_by_type:
+        return {}
+
+    grand_totals = {
+        'plan_units': sum(item.get('total_plan_units', 0) for item in summary_by_type),
+        'fact_units': sum(item.get('total_fact_units', 0) for item in summary_by_type),
+        'plan_volume': sum(item.get('total_plan_volume', 0) for item in summary_by_type),
+        'fact_volume': sum(item.get('total_fact_volume', 0) for item in summary_by_type),
+        'plan_income': sum(item.get('total_plan_income', 0) for item in summary_by_type),
+        'fact_income': sum(item.get('total_fact_income', 0) for item in summary_by_type),
+        'expected_income': sum(item['total_expected_income']['sum'] for item in summary_by_type),
+        'expected_income_ids': [id_val for item in summary_by_type for id_val in item['total_expected_income']['ids']]
+    }
+
+    today = date.today()
+    workdays_in_month = np.busday_count(f'{year}-{month:02d}-01',
+                                        f'{year}-{month + 1:02d}-01' if month < 12 else f'{year + 1}-01-01')
+    passed_workdays = np.busday_count(f'{year}-{month:02d}-01',
+                                      today) if today.month == month and today.year == year else workdays_in_month
+    passed_workdays = max(1, passed_workdays)
+
+    grand_totals['percent_fact_units'] = (grand_totals['fact_units'] / grand_totals['plan_units'] * 100) if \
+        grand_totals['plan_units'] > 0 else 0
+    grand_totals['forecast_units'] = ((grand_totals['fact_units'] / passed_workdays) * workdays_in_month / grand_totals[
+        'plan_units'] * 100) if grand_totals['plan_units'] > 0 else 0
+
+    grand_totals['percent_fact_volume'] = (grand_totals['fact_volume'] / grand_totals['plan_volume'] * 100) if \
+        grand_totals['plan_volume'] > 0 else 0
+    grand_totals['forecast_volume'] = (
+            (grand_totals['fact_volume'] / passed_workdays) * workdays_in_month / grand_totals[
+        'plan_volume'] * 100) if grand_totals['plan_volume'] > 0 else 0
+
+    grand_totals['percent_fact_income'] = (grand_totals['fact_income'] / grand_totals['plan_income'] * 100) if \
+        grand_totals['plan_income'] > 0 else 0
+
+    return grand_totals
+
+
 def get_project_dashboard_data(complex_name: str, property_type: str = None):
+    """Собирает данные для дашборда, комбинируя SQLite и MySQL."""
     today = date.today()
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
-    houses_in_complex = g.company_db_session.query(EstateHouse).filter_by(complex_name=complex_name).order_by(EstateHouse.name).all()
-    houses_data = []
 
-    # Используем planning_models
+    # --- Запросы к MySQL (фактические данные) ---
+    houses_in_complex = g.mysql_db_session.query(EstateHouse).filter_by(complex_name=complex_name).order_by(
+        EstateHouse.name).all()
+
+    # --- Запросы к SQLite (локальные данные) ---
     active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
 
+    houses_data = []
     for house in houses_in_complex:
-        house_details = {
-            "house_name": house.name,
-            "property_types_data": {}
-        }
-
-        # Используем planning_models
+        house_details = {"house_name": house.name, "property_types_data": {}}
         for prop_type_enum in planning_models.PropertyType:
             prop_type_value = prop_type_enum.value
 
-            total_units = g.company_db_session.query(func.count(EstateSell.id)).filter(
-                EstateSell.house_id == house.id,
-                EstateSell.estate_sell_category == prop_type_value
+            total_units = g.mysql_db_session.query(func.count(EstateSell.id)).filter(
+                EstateSell.house_id == house.id, EstateSell.estate_sell_category == prop_type_value
             ).scalar()
-
             if total_units == 0:
                 continue
 
-            sold_units = g.company_db_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
+            sold_units = g.mysql_db_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
                 EstateSell.house_id == house.id,
                 EstateSell.estate_sell_category == prop_type_value,
                 EstateDeal.deal_status_name.in_(sold_statuses)
@@ -423,59 +576,44 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
             remaining_count = total_units - sold_units
             avg_price_per_sqm = 0
-            if remaining_count > 0:
-                total_discount_rate = 0
-                if active_version:
-                    # Используем planning_models
-                    discount = g.company_db_session.query(planning_models.Discount).filter_by(
-                        version_id=active_version.id, complex_name=complex_name,
-                        property_type=prop_type_enum, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
-                    ).first()
-                    if discount:
-                        total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
+            if remaining_count > 0 and active_version:
+                discount = g.company_db_session.query(planning_models.Discount).filter_by(
+                    version_id=active_version.id, complex_name=complex_name,
+                    property_type=prop_type_enum, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+                ).first()
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) if discount else 0
 
-                unsold_units = g.company_db_session.query(EstateSell).filter(
+                unsold_units = g.mysql_db_session.query(EstateSell).filter(
                     EstateSell.house_id == house.id,
                     EstateSell.estate_sell_category == prop_type_value,
                     EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
                 ).all()
 
                 prices_per_sqm_list = []
-                # Используем planning_models
                 deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
-
                 for sell in unsold_units:
                     if sell.estate_price and sell.estate_price > deduction_amount and sell.estate_area and sell.estate_area > 0:
                         price_after_deduction = sell.estate_price - deduction_amount
                         final_price = price_after_deduction * (1 - total_discount_rate)
-                        price_per_sqm = final_price / sell.estate_area
-                        prices_per_sqm_list.append(price_per_sqm)
-
+                        prices_per_sqm_list.append(final_price / sell.estate_area)
                 if prices_per_sqm_list:
                     avg_price_per_sqm = sum(prices_per_sqm_list) / len(prices_per_sqm_list)
 
             house_details["property_types_data"][prop_type_value] = {
-                "total_count": total_units,
-                "remaining_count": remaining_count,
-                "avg_price_per_sqm": avg_price_per_sqm
+                "total_count": total_units, "remaining_count": remaining_count, "avg_price_per_sqm": avg_price_per_sqm
             }
-
         if house_details["property_types_data"]:
             houses_data.append(house_details)
 
-    total_deals_volume = g.company_db_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).join(EstateHouse).filter(
-        EstateHouse.complex_name == complex_name,
-        EstateDeal.deal_status_name.in_(sold_statuses)
+    total_deals_volume = g.mysql_db_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).join(
+        EstateHouse).filter(
+        EstateHouse.complex_name == complex_name, EstateDeal.deal_status_name.in_(sold_statuses)
     ).scalar() or 0
-
-    total_income = g.company_db_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).join(EstateHouse).filter(
-        EstateHouse.complex_name == complex_name,
-        FinanceOperation.status_name == 'Проведено'
+    total_income = g.mysql_db_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).join(EstateHouse).filter(
+        EstateHouse.complex_name == complex_name, FinanceOperation.status_name == 'Проведено'
     ).scalar() or 0
 
     remainders_by_type = {}
-    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
-
     for prop_type_enum in planning_models.PropertyType:
         prop_type_value = prop_type_enum.value
         total_discount_rate = 0
@@ -489,7 +627,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             if discount:
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
 
-        remainder_sells_query = g.company_db_session.query(EstateSell).join(EstateHouse).filter(
+        remainder_sells_query = g.mysql_db_session.query(EstateSell).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateSell.estate_sell_category == prop_type_value,
             EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
@@ -518,7 +656,8 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         'plan_income': [0] * 12, 'fact_income': [0] * 12
     }
 
-    plans_query = g.company_db_session.query(planning_models.SalesPlan).filter_by(complex_name=complex_name, year=today.year)
+    plans_query = g.company_db_session.query(planning_models.SalesPlan).filter_by(complex_name=complex_name,
+                                                                                  year=today.year)
     if property_type:
         plans_query = plans_query.filter_by(property_type=property_type)
     for p in plans_query.all():
@@ -527,7 +666,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
     fact_volume_by_month = [0] * 12
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    volume_query = g.company_db_session.query(
+    volume_query = g.mysql_db_session.query(
         extract('month', effective_date).label('month'),
         func.sum(EstateDeal.deal_sum).label('total')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -542,7 +681,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     yearly_plan_fact['fact_volume'] = fact_volume_by_month
 
     fact_income_by_month = [0] * 12
-    income_query = g.company_db_session.query(
+    income_query = g.mysql_db_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
         func.sum(FinanceOperation.summa).label('total')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -555,7 +694,8 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     for row in income_query.group_by('month').all():
         fact_income_by_month[row.month - 1] = row.total or 0
     yearly_plan_fact['fact_income'] = fact_income_by_month
-    recent_deals = g.company_db_session.query(
+
+    recent_deals = g.mysql_db_session.query(
         EstateDeal.id, EstateDeal.deal_sum, EstateSell.estate_sell_category.label('property_type'),
         func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date).label('deal_date')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -574,7 +714,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     type_to_analyze = property_type if property_type else 'Квартира'
 
     if type_to_analyze == 'Квартира':
-        base_query = g.company_db_session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
+        base_query = g.mysql_db_session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateDeal.deal_status_name.in_(sold_statuses),
             EstateSell.estate_sell_category == type_to_analyze
@@ -619,210 +759,3 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         "houses_data": houses_data,
     }
     return dashboard_data
-
-
-def generate_plan_fact_excel(year: int, month: int, property_type: str):
-    """
-    Генерирует Excel-файл с детальным план-фактным отчетом (ИСПРАВЛЕННАЯ ВЕРСИЯ).
-    """
-    # Теперь функция возвращает три значения: report_data, totals, total_refunds
-    report_data, totals, total_refunds = generate_plan_fact_report(year, month, property_type)
-
-    if not report_data:
-        return None
-
-    # 1. Создаем основной DataFrame
-    df = pd.DataFrame(report_data)
-
-    # 2. Создаем DataFrame для итогов
-    totals_df = pd.DataFrame([totals])
-
-    # 3. Определяем нужные колонки в правильном порядке (с системными именами)
-    ordered_columns = [
-        'complex_name',
-        'plan_units', 'fact_units', 'percent_fact_units', 'forecast_units',
-        'plan_volume', 'fact_volume', 'percent_fact_volume', 'forecast_volume',
-        'plan_income', 'fact_income', 'percent_fact_income', 'expected_income'
-    ]
-
-    # Определяем красивые русские названия для них
-    renamed_columns = [
-        'Проект',
-        'План, шт', 'Факт, шт', '% Факт, шт', '% Прогноз, шт',
-        'План контрактации', 'Факт контрактации', '% Факт контр.', '% Прогноз контр.',
-        'План поступлений', 'Факт поступлений', '% Факт поступл.', 'Ожидаемые поступл.'
-    ]
-
-    # 4. Выбираем нужные колонки из обоих DataFrame
-    df = df[ordered_columns]
-    totals_df = totals_df[[col for col in ordered_columns if col != 'complex_name']]  # Все, кроме названия проекта
-    totals_df.insert(0, 'complex_name', f'Итого ({property_type})')
-
-    # 5. Объединяем основной DataFrame и строку итогов
-    final_df = pd.concat([df, totals_df], ignore_index=True)
-
-    # 6. ТЕПЕРЬ переименовываем колонки в финальном DataFrame
-    final_df.columns = renamed_columns
-
-    # 7. Сохраняем в Excel
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        final_df.to_excel(writer, index=False, sheet_name=f'План-факт {month:02d}-{year}')
-
-    output.seek(0)
-    return output
-
-def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_type: str = None):
-    """
-    Эталонная функция для расчета годовых фактических метрик (объем и поступления)
-    с разбивкой по месяцам для ОДНОГО ЖК.
-    """
-    house = g.company_db_session.query(EstateHouse).filter_by(complex_name=complex_name).first()
-    if not house:
-        return {'volume': [0] * 12, 'income': [0] * 12}
-
-    fact_volume_by_month = [0] * 12
-    fact_income_by_month = [0] * 12
-    sold_statuses = ["Сделка в работе", "Сделка проведена"]
-
-    # --- ЭТАЛОННЫЙ ЗАПРОС ДЛЯ КОНТРАКТАЦИИ ---
-    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    volume_query = g.company_db_session.query(
-        extract('month', effective_date).label('month'),
-        func.sum(EstateDeal.deal_sum).label('total')
-    ).join(EstateSell).filter(
-        EstateSell.house_id == house.id,
-        EstateDeal.deal_status_name.in_(sold_statuses),
-        extract('year', effective_date) == year
-    )
-    if property_type:
-        volume_query = volume_query.filter(EstateSell.estate_sell_category == property_type)
-
-    for row in volume_query.group_by('month').all():
-        fact_volume_by_month[row.month - 1] = row.total or 0
-
-    # --- ЭТАЛОННЫЙ ЗАПРОС ДЛЯ ПОСТУПЛЕНИЙ ---
-    income_query = g.company_db_session.query(
-        extract('month', FinanceOperation.date_added).label('month'),
-        func.sum(FinanceOperation.summa).label('total')
-    ).join(EstateSell).filter(
-        EstateSell.house_id == house.id,
-        FinanceOperation.status_name == 'Проведено',
-        extract('year', FinanceOperation.date_added) == year
-    )
-    if property_type:
-        income_query = income_query.filter(EstateSell.estate_sell_category == property_type)
-
-    for row in income_query.group_by('month').all():
-        fact_income_by_month[row.month - 1] = row.total or 0
-
-    return {'volume': fact_volume_by_month, 'income': fact_income_by_month}
-
-
-def get_price_dynamics_data(complex_name: str, property_type: str = None):
-    """
-    Рассчитывает динамику средней фактической цены продажи за м² по месяцам.
-    """
-    # ========================= PRINT 1: Проверяем входящие параметры =========================
-    print(f"\n--- [DEBUG] Вызов get_price_dynamics_data ---")
-    print(f"[DEBUG] complex_name: '{complex_name}'")
-    print(f"[DEBUG] property_type: '{property_type}'")
-    # ======================================================================================
-
-    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-
-    query = g.company_db_session.query(
-        extract('year', effective_date).label('deal_year'),
-        extract('month', effective_date).label('deal_month'),
-        (EstateDeal.deal_sum / EstateSell.estate_area).label('price_per_sqm')
-    ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
-        .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
-        .filter(
-        effective_date.isnot(None),
-        EstateHouse.complex_name == complex_name,
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
-        EstateSell.estate_area.isnot(None),
-        EstateSell.estate_area > 0,
-        EstateDeal.deal_sum.isnot(None),
-        EstateDeal.deal_sum > 0
-    )
-
-    if property_type:
-        query = query.filter(EstateSell.estate_sell_category == property_type)
-
-    subquery = query.subquery()
-    monthly_avg_query = g.company_db_session.query(
-        subquery.c.deal_year,
-        subquery.c.deal_month,
-        func.avg(subquery.c.price_per_sqm).label('avg_price')
-    ).group_by(subquery.c.deal_year, subquery.c.deal_month) \
-        .order_by(subquery.c.deal_year, subquery.c.deal_month)
-
-    # ========================= PRINT 2: Смотрим на сгенерированный SQL =======================
-    # Это покажет финальный SQL-запрос, который уходит в базу данных
-    print(f"[DEBUG] Сгенерированный SQL: {monthly_avg_query.statement.compile(compile_kwargs={'literal_binds': True})}")
-    # =======================================================================================
-
-    results = monthly_avg_query.all()
-
-    # ========================= PRINT 3: Проверяем результат из БД ============================
-    print(f"[DEBUG] Результат из БД (сырой): {results}")
-    print(f"[DEBUG] Найдено строк: {len(results)}")
-    print(f"--- [DEBUG] Конец get_price_dynamics_data ---\n")
-    # =======================================================================================
-
-    price_dynamics = {
-        "labels": [],
-        "data": []
-    }
-    for row in results:
-        price_dynamics["labels"].append(f"{int(row.deal_month):02d}.{int(row.deal_year)}")
-        price_dynamics["data"].append(row.avg_price)
-
-    return price_dynamics
-
-
-def calculate_grand_totals(year, month):
-    """
-    Рассчитывает общие итоговые показатели, включая ID для ссылок.
-    """
-    summary_by_type = get_monthly_summary_by_property_type(year, month)
-
-    if not summary_by_type:
-        return {}
-
-    grand_totals = {
-        'plan_units': sum(item.get('total_plan_units', 0) for item in summary_by_type),
-        'fact_units': sum(item.get('total_fact_units', 0) for item in summary_by_type),
-        'plan_volume': sum(item.get('total_plan_volume', 0) for item in summary_by_type),
-        'fact_volume': sum(item.get('total_fact_volume', 0) for item in summary_by_type),
-        'plan_income': sum(item.get('total_plan_income', 0) for item in summary_by_type),
-        'fact_income': sum(item.get('total_fact_income', 0) for item in summary_by_type),
-        # --- ИЗМЕНЕНИЕ: Собираем сумму и ID для общего итога ---
-        'expected_income': sum(item['total_expected_income']['sum'] for item in summary_by_type),
-        'expected_income_ids': [id_val for item in summary_by_type for id_val in item['total_expected_income']['ids']]
-    }
-
-    # Пересчитываем проценты и прогнозы для итоговой строки
-    today = date.today()
-    workdays_in_month = np.busday_count(f'{year}-{month:02d}-01',
-                                        f'{year}-{month + 1:02d}-01' if month < 12 else f'{year + 1}-01-01')
-    passed_workdays = np.busday_count(f'{year}-{month:02d}-01',
-                                      today) if today.month == month and today.year == year else workdays_in_month
-    passed_workdays = max(1, passed_workdays)
-
-    grand_totals['percent_fact_units'] = (grand_totals['fact_units'] / grand_totals['plan_units'] * 100) if \
-    grand_totals['plan_units'] > 0 else 0
-    grand_totals['forecast_units'] = ((grand_totals['fact_units'] / passed_workdays) * workdays_in_month / grand_totals[
-        'plan_units'] * 100) if grand_totals['plan_units'] > 0 else 0
-
-    grand_totals['percent_fact_volume'] = (grand_totals['fact_volume'] / grand_totals['plan_volume'] * 100) if \
-    grand_totals['plan_volume'] > 0 else 0
-    grand_totals['forecast_volume'] = (
-                (grand_totals['fact_volume'] / passed_workdays) * workdays_in_month / grand_totals[
-            'plan_volume'] * 100) if grand_totals['plan_volume'] > 0 else 0
-
-    grand_totals['percent_fact_income'] = (grand_totals['fact_income'] / grand_totals['plan_income'] * 100) if \
-    grand_totals['plan_income'] > 0 else 0
-
-    return grand_totals

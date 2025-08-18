@@ -7,7 +7,7 @@ from datetime import datetime, date
 from collections import defaultdict
 from sqlalchemy import func, extract
 import io
-
+from flask import g
 from app.core.extensions import db
 
 # Обновленные импорты
@@ -27,7 +27,7 @@ def process_manager_plans_from_excel(file_path: str):
     # В регулярном выражении оставляем только "поступления"
     header_pattern = re.compile(r"(поступления) (\d{2}\.\d{2}\.\d{4})", re.IGNORECASE)
 
-    managers_map = {m.full_name: m.id for m in auth_models.SalesManager.query.all()}
+    managers_map = {m.full_name: m.id for m in g.mysql_db_session.query(auth_models.SalesManager).all()}
 
     for index, row in df.iterrows():
         manager_name = row.iloc[0]
@@ -54,12 +54,12 @@ def process_manager_plans_from_excel(file_path: str):
 
     updated_count, created_count = 0, 0
     for (manager_id, year, month), values in plans_to_save.items():
-        plan_entry = planning_models.ManagerSalesPlan.query.filter_by(
+        plan_entry = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(
             manager_id=manager_id, year=year, month=month
         ).first()
         if not plan_entry:
             plan_entry = planning_models.ManagerSalesPlan(manager_id=manager_id, year=year, month=month)
-            db.session.add(plan_entry)
+            g.company_db_session.add(plan_entry)
             created_count += 1
 
         # Устанавливаем plan_volume в 0, обновляем только plan_income
@@ -67,7 +67,7 @@ def process_manager_plans_from_excel(file_path: str):
         plan_entry.plan_income = values.get('plan_income', 0.0)
         updated_count += 1
 
-    db.session.commit()
+    g.company_db_session.commit()
     return f"Успешно обработано планов: создано {created_count}, обновлено {updated_count}."
 
 
@@ -76,15 +76,15 @@ def get_manager_performance_details(manager_id: int, year: int):
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
     ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
     """
-    manager = auth_models.SalesManager.query.get(manager_id)
+    manager = g.mysql_db_session.query(auth_models.SalesManager).get(manager_id)
     if not manager:
         return None
 
-    plans_query = planning_models.ManagerSalesPlan.query.filter_by(manager_id=manager_id, year=year).all()
+    plans_query = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(manager_id=manager_id, year=year).all()
     plan_data = {p.month: p for p in plans_query}
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    fact_volume_query = db.session.query(
+    fact_volume_query = g.mysql_db_session.query(
         extract('month', effective_date).label('month'),
         func.sum(EstateDeal.deal_sum).label('fact_volume')
     ).filter(
@@ -94,7 +94,7 @@ def get_manager_performance_details(manager_id: int, year: int):
     ).group_by('month').all()
     fact_volume_data = {row.month: row.fact_volume or 0 for row in fact_volume_query}
 
-    fact_income_query = db.session.query(
+    fact_income_query = g.mysql_db_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
         func.sum(FinanceOperation.summa).label('fact_income')
     ).filter(
@@ -136,7 +136,7 @@ def generate_manager_plan_template_excel():
     """
     Генерирует Excel-файл с ФИО всех менеджеров и столбцами планов на текущий год.
     """
-    managers = auth_models.SalesManager.query.order_by(auth_models.SalesManager.full_name).all()
+    managers = g.mysql_db_session.query(auth_models.SalesManager).order_by(auth_models.SalesManager.full_name).all()
     manager_names = [manager.full_name for manager in managers]
 
     current_year = date.today().year
@@ -190,7 +190,7 @@ def generate_kpi_report_excel(year: int, month: int):
         raise ValueError("Не удалось получить актуальный курс USD.")
 
     # 2. ШАГ А: Получаем все планы из базы `planning_db` за указанный период
-    plans = planning_models.ManagerSalesPlan.query.filter(
+    plans = g.company_db_session.query(planning_models.ManagerSalesPlan).filter(
         planning_models.ManagerSalesPlan.year == year,
         planning_models.ManagerSalesPlan.month == month,
         planning_models.ManagerSalesPlan.plan_income > 0
@@ -203,7 +203,7 @@ def generate_kpi_report_excel(year: int, month: int):
     plans_map = {p.manager_id: p for p in plans}
 
     # 3. ШАГ Б: Получаем из основной базы данных всех менеджеров, чьи ID мы нашли
-    managers = auth_models.SalesManager.query.filter(
+    managers = g.mysql_db_session.query(auth_models.SalesManager).filter(
         auth_models.SalesManager.id.in_(manager_ids_with_plans)
     ).order_by(auth_models.SalesManager.full_name).all()
 
@@ -214,7 +214,7 @@ def generate_kpi_report_excel(year: int, month: int):
         if not plan:
             continue
 
-        fact_income_query = db.session.query(
+        fact_income_query = g.mysql_db_session.query(
             func.sum(FinanceOperation.summa)
         ).filter(
             FinanceOperation.manager_id == manager.id,
@@ -309,7 +309,7 @@ def get_manager_kpis(manager_id: int, year: int):
     Рассчитывает расширенные KPI для одного менеджера на основе ПОСТУПЛЕНИЙ.
     """
     # Запрос для "Любимого ЖК" остается по количеству сделок
-    best_complex_query = db.session.query(
+    best_complex_query = g.mysql_db_session.query(
         EstateHouse.complex_name, func.count(EstateDeal.id).label('deal_count')
     ).join(EstateSell, EstateHouse.sells).join(EstateDeal, EstateSell.deals) \
         .filter(
@@ -318,7 +318,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by(EstateHouse.complex_name).order_by(func.count(EstateDeal.id).desc()).first()
 
     # Запрос для "Продано юнитов" остается по количеству сделок
-    units_by_type_query = db.session.query(
+    units_by_type_query = g.mysql_db_session.query(
         EstateSell.estate_sell_category, func.count(EstateDeal.id).label('unit_count')
     ).join(EstateDeal, EstateSell.deals).filter(
         EstateDeal.deal_manager_id == manager_id,
@@ -328,7 +328,7 @@ def get_manager_kpis(manager_id: int, year: int):
     # Все расчеты рекордов переведены на поступления
 
     # Лучший год по ПОСТУПЛЕНИЯМ
-    best_year_income_query = db.session.query(
+    best_year_income_query =g.mysql_db_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
@@ -337,7 +337,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by('income_year').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     # Лучший месяц за все время по ПОСТУПЛЕНИЯМ
-    best_month_income_query = db.session.query(
+    best_month_income_query =g.mysql_db_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
@@ -347,7 +347,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by('income_year', 'income_month').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     # Лучший месяц в выбранном году по ПОСТУПЛЕНИЯМ
-    best_month_in_year_income_query = db.session.query(
+    best_month_in_year_income_query = g.mysql_db_session.query(
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(

@@ -42,7 +42,7 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     }
     excluded_sell_ids = {e.sell_id for e in g.company_db_session.query(ExcludedSell).all()}
 
-    query = g.company_db_session.query(EstateSell).options(
+    query = g.mysql_db_session.query(EstateSell).options(
         joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_sell_category == property_type_enum.value,
@@ -119,7 +119,7 @@ def get_apartment_card_data(sell_id: int):
     """
     Собирает все данные для детальной карточки квартиры.
     """
-    sell = g.company_db_session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
+    sell = g.mysql_db_session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
     if not sell: abort(404)
 
     active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()

@@ -64,11 +64,22 @@
                     {{ render_field(form.name) }}
                     {{ render_field(form.subdomain) }}
                     <hr>
-                    <h6 class="text-muted">Данные для подключения к MySQL</h6>
+                    <h6 class="text-muted">Данные для подключения к MySQL (Read-Only)</h6>
                     {{ render_field(form.db_host) }}
                     {{ render_field(form.db_name) }}
                     {{ render_field(form.db_user) }}
                     {{ render_field(form.db_password) }}
+                    <hr>
+                    <h6 class="text-muted">Настройки почтового сервиса (SMTP)</h6>
+                    {{ render_field(form.mail_server) }}
+                    {{ render_field(form.mail_port) }}
+                    {{ render_field(form.mail_username) }}
+                    {{ render_field(form.mail_password) }}
+
+                    <div class="form-check form-switch mb-3">
+                        {{ form.mail_use_tls(class="form-check-input") }}
+                        {{ form.mail_use_tls.label(class="form-check-label") }}
+                    </div>
                     {{ form.submit(class="btn btn-warning w-100 mt-3") }}
                 </form>
             </div>

@@ -4,21 +4,21 @@ import requests
 from datetime import datetime
 from app.core.extensions import db
 from app.models.finance_models import CurrencySettings
-
+from flask import g
 # API Центрального Банка Узбекистана для курса доллара
 CBU_API_URL = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/USD/"
 
 
 def _get_settings():
     """Вспомогательная функция для получения единственной строки настроек."""
-    settings = CurrencySettings.query.first()
+    settings = g.company_db_session.query(CurrencySettings).first()
     if not settings:
         settings = CurrencySettings()
-        db.session.add(settings)
+        g.company_db_session.add(settings)
         # Установим начальные значения при первом создании
         settings.manual_rate = 12500.0
         settings.update_effective_rate()
-        db.session.commit()
+        g.company_db_session.commit()
     return settings
 
 
@@ -39,7 +39,7 @@ def _update_cbu_rate_logic():
         if settings.rate_source == 'cbu':
             settings.update_effective_rate()
 
-        db.session.commit()
+        g.company_db_session.commit()
         print(f"Successfully updated CBU rate to: {rate_float}")
         return True
     except requests.RequestException as e:
@@ -64,7 +64,7 @@ def set_rate_source(source: str):
     settings = _get_settings()
     settings.rate_source = source
     settings.update_effective_rate()  # Обновляем актуальный курс
-    db.session.commit()
+    g.company_db_session.commit()
 
 
 def set_manual_rate(rate: float):
@@ -79,7 +79,7 @@ def set_manual_rate(rate: float):
     if settings.rate_source == 'manual':
         settings.update_effective_rate()
 
-    db.session.commit()
+    g.company_db_session.commit()
 
 
 def get_current_effective_rate():

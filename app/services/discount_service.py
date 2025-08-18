@@ -156,7 +156,7 @@ def get_discounts_with_summary():
     discounts_map = {}
     for d in all_discounts:
         discounts_map.setdefault(d.complex_name, []).append(d)
-    all_sells = g.company_db_session.query(EstateSell).options(joinedload(EstateSell.house)).all()
+    all_sells = g.mysql_db_session.query(EstateSell).options(joinedload(EstateSell.house)).all()
     sells_by_complex = {}
     for s in all_sells:
         if s.house: sells_by_complex.setdefault(s.house.complex_name, []).append(s)

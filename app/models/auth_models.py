@@ -9,10 +9,20 @@ class Company(db.Model):
     __tablename__ = 'companies'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), unique=True, nullable=False)
-    # Поддомен для доступа, например, "gh" для "gh.your-service.com"
     subdomain = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    # Строка подключения к базе данных этой компании
+
+    # --- ИЗМЕНЕНИЯ: Два поля для двух баз данных ---
+    # Для локальных данных (SQLite)
     db_uri = db.Column(db.String(255), nullable=False)
+    # Для фактических данных (MySQL, read-only)
+    mysql_db_uri = db.Column(db.String(255), nullable=True)
+
+    # --- Настройки почты ---
+    mail_server = db.Column(db.String(120), default='mail.gh.uz')
+    mail_port = db.Column(db.Integer, default=587)
+    mail_use_tls = db.Column(db.Boolean, default=True)
+    mail_username = db.Column(db.String(120), default='robot@gh.uz')
+    mail_password = db.Column(db.String(120), nullable=True)
 
     users = db.relationship('User', back_populates='company')
 
@@ -75,7 +85,6 @@ class SalesManager(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(255), unique=True, nullable=False)
     post_title = db.Column(db.String(255), nullable=True)
-    data_hash = db.Column(db.String(64), index=True, nullable=True)
     def __repr__(self):
         return f'<SalesManager {self.full_name}>'
 

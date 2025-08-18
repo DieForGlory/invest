@@ -13,7 +13,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
     Собирает аналитические данные по менеджерам за указанный период.
     """
     # ... (Блоки 1, 2 и 3 без изменений) ...
-    manager_query = g.company_db_session.query(SalesManager)
+    manager_query = g.mysql_db_session.query(SalesManager)
     if post_title and post_title != 'all':
         manager_query = manager_query.filter(SalesManager.post_title == post_title)
 
@@ -38,7 +38,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
     manager_ids = list(report_data.keys())
 
     # 2. Подсчет "Броней" и сбор их ID
-    bookings_query = g.company_db_session.query(
+    bookings_query = g.mysql_db_session.query(
         EstateBuysStatusLog.manager_id,
         EstateBuysStatusLog.estate_buy_id
     ).filter(
@@ -60,7 +60,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
         "Сделка расторгнута": "deals_failed"  # <-- ИЗМЕНЕНИЕ
     }
 
-    deal_events = g.company_db_session.query(
+    deal_events = g.mysql_db_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name
     ).filter(
@@ -71,7 +71,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
 
     if deal_events:
         deal_buy_ids = list(set([event.estate_buy_id for event in deal_events]))
-        full_history_logs = g.company_db_session.query(
+        full_history_logs = g.mysql_db_session.query(
             EstateBuysStatusLog.estate_buy_id,
             EstateBuysStatusLog.manager_id,
             EstateBuysStatusLog.status_to_name
@@ -102,7 +102,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
                     report_data[manager_id][key]['buy_ids'].append(buy_id)
 
     # 4. Подсчет "Сделок отменена"
-    canceled_deals_query = g.company_db_session.query(
+    canceled_deals_query = g.mysql_db_session.query(
         EstateDeal.deal_manager_id,
         func.count(EstateDeal.id)
     ).filter(

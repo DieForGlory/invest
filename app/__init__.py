@@ -8,6 +8,7 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_babel import Babel
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine  # <-- ДОБАВЛЕН ИМПОРТ
 
 from .core.config import DevelopmentConfig
 from .core.extensions import db
@@ -18,6 +19,7 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message = "Пожалуйста, войдите в систему для доступа к этой странице."
 login_manager.login_message_category = "info"
 babel = Babel()
+
 
 # 2. Пользовательский кодировщик для JSON
 class CustomJSONEncoder(json.JSONEncoder):
@@ -31,6 +33,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         else:
             return list(iterable)
         return json.JSONEncoder.default(self, obj)
+
 
 # 3. Функция для выбора языка
 def select_locale():
@@ -58,7 +61,7 @@ def create_app(config_class=DevelopmentConfig):
         print(f"Ошибка при создании папки instance: {e}")
 
     with app.app_context():
-        # Импорт моделей (теперь только auth_models здесь для user_loader)
+        # Импорт моделей
         from .models import auth_models
 
         # Регистрация Blueprints
@@ -71,6 +74,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.api_routes import api_bp
         from .web.special_offer_routes import special_offer_bp
         from .web.manager_analytics_routes import manager_analytics_bp
+        from .web.super_admin_routes import super_admin_bp
 
         app.register_blueprint(report_bp, url_prefix='/reports')
         app.register_blueprint(main_bp)
@@ -81,45 +85,55 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(api_bp, url_prefix='/api/v1')
         app.register_blueprint(special_offer_bp, url_prefix='/specials')
         app.register_blueprint(manager_analytics_bp, url_prefix='/manager-analytics')
+        app.register_blueprint(super_admin_bp)
 
         @login_manager.user_loader
         def load_user(user_id):
             return auth_models.User.query.get(int(user_id))
 
-    # --- НАЧАЛО: КЛЮЧЕВАЯ ЛОГИКА МУЛЬТИ-АРЕНДНОСТИ ---
     @app.before_request
     def before_request_tasks():
         g.lang = str(select_locale())
 
-        # Для страниц логина и статики подключение к базе компании не нужно
-        if request.endpoint and ('static' in request.endpoint or 'auth.' in request.endpoint):
+        if request.endpoint and (
+                'static' in request.endpoint or 'auth.' in request.endpoint or 'super_admin.' in request.endpoint):
             return
 
-        # Если пользователь не аутентифицирован, ничего не делаем
         if not current_user.is_authenticated:
             return
 
-        # Получаем компанию текущего пользователя
         company = current_user.company
         if not company:
-            # Этого не должно случиться, если все пользователи привязаны к компаниям
             return abort(403, "Пользователь не привязан к компании.")
 
-        # Создаем движок и сессию для базы данных этой компании
         try:
-            engine = db.create_engine(company.db_uri)
-            # Сохраняем сессию в глобальном объекте `g` на время запроса
-            g.company_db_session = sessionmaker(bind=engine)()
+            local_engine = create_engine(company.db_uri)
+            g.company_db_session = sessionmaker(bind=local_engine)()
         except Exception as e:
-            # Обработка ошибки, если не удалось подключиться к базе компании
-            print(f"CRITICAL: Could not connect to tenant DB for {company.name}. Error: {e}")
-            return abort(500, "Не удалось подключиться к базе данных компании.")
+            print(f"CRITICAL: Could not connect to tenant LOCAL DB for {company.name}. Error: {e}")
+            return abort(500, "Не удалось подключиться к локальной базе данных компании.")
+
+        if company.mysql_db_uri:
+            try:
+                # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: Добавляем опции echo и isolation_level ---
+                mysql_engine = create_engine(
+                    company.mysql_db_uri,
+                    echo=True,  # Включаем полное логирование SQL
+                    isolation_level="READ COMMITTED"  # Заставляем читать актуальные данные
+                )
+                g.mysql_db_session = sessionmaker(bind=mysql_engine)()
+                print("--- [DEBUG] ✔️ Подключение к MYSQL успешно c новыми параметрами! ---")
+            except Exception as e:
+                print(f"CRITICAL: Could not connect to tenant MYSQL DB for {company.name}. Error: {e}")
+                return abort(500, "Не удалось подключиться к внешней базе данных MySQL.")
+        else:
+            g.mysql_db_session = None
 
     @app.teardown_request
     def teardown_request(exception=None):
-        # Гарантированно закрываем сессию после каждого запроса, чтобы избежать утечек
         if hasattr(g, 'company_db_session'):
             g.company_db_session.close()
-    # --- КОНЕЦ: КЛЮЧЕВАЯ ЛОГИКА МУЛЬТИ-АРЕНДНОСТИ ---
+        if hasattr(g, 'mysql_db_session') and g.mysql_db_session:
+            g.mysql_db_session.close()
 
     return app
