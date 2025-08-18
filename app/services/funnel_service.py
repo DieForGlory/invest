@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy import func
 from ..core.extensions import db
 from ..models.funnel_models import EstateBuy, EstateBuysStatusLog
-
+from flask import g
 
 
 def _format_status(status, custom_status):
@@ -22,7 +22,7 @@ def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
     (С УТОЧНЕНИЕМ: Сделка = 'Сделка в работе' + 'Сделка проведена')
     """
     # === Шаги 1-2: Сбор когорты и логов (без изменений) ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = g.company_db_session.query(EstateBuy.id)
     try:
         start_date = date.fromisoformat(start_date_str)
         cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
@@ -40,7 +40,7 @@ def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
     if not total_leads_count:
         return {'total_leads': 0}
 
-    logs = db.session.query(
+    logs = g.company_db_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -182,7 +182,7 @@ def get_funnel_data(start_date_str: str, end_date_str: str):
     Строит полное дерево путей заявок, ВКЛЮЧАЯ ID ЗАЯВОК в каждом узле.
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = g.company_db_session.query(EstateBuy.id)
     if start_date_str:
         try:
             start_date = date.fromisoformat(start_date_str)
@@ -202,7 +202,7 @@ def get_funnel_data(start_date_str: str, end_date_str: str):
         return {'name': 'Заявки, созданные за период', 'count': 0, 'ids': [], 'children': []}, {}
 
     # === Шаг 2: Получаем все логи для когорты, используя подзапрос ===
-    logs = db.session.query(
+    logs = g.company_db_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -242,7 +242,7 @@ def get_dead_end_summary(start_date_str: str, end_date_str: str):
     (Эта функция остается без изменений)
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = g.company_db_session.query(EstateBuy.id)
     try:
         start_date = date.fromisoformat(start_date_str)
         cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
@@ -253,12 +253,12 @@ def get_dead_end_summary(start_date_str: str, end_date_str: str):
     except (ValueError, TypeError): pass
 
     cohort_subquery = cohort_query.subquery()
-    trunk_count = db.session.query(func.count(cohort_subquery.c.id)).scalar() or 0
+    trunk_count = g.company_db_session.query(func.count(cohort_subquery.c.id)).scalar() or 0
     if not trunk_count:
         return {'total_leads': 0, 'summary': [], 'chart_data': {}}
 
     # === Шаг 2: Получаем все логи для когорты, упорядоченные по времени ===
-    logs = db.session.query(
+    logs = g.company_db_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -300,7 +300,7 @@ def get_leads_details_by_ids(lead_ids_str: str):
         return []
     if not lead_ids:
         return []
-    leads = db.session.query(
+    leads = g.company_db_session.query(
         EstateBuy.id,
         EstateBuy.date_added
     ).filter(

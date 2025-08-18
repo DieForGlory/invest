@@ -2,12 +2,12 @@
 import os
 import json
 from datetime import date, datetime
-from flask import Flask, request, render_template, g, session, current_app
-from flask_login import LoginManager
-from flask_apscheduler import APScheduler
+from flask import Flask, request, render_template, g, session, current_app, abort
+from flask_login import LoginManager, current_user
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_babel import Babel
+from sqlalchemy.orm import sessionmaker
 
 from .core.config import DevelopmentConfig
 from .core.extensions import db
@@ -18,7 +18,6 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message = "Пожалуйста, войдите в систему для доступа к этой странице."
 login_manager.login_message_category = "info"
 babel = Babel()
-scheduler = APScheduler()
 
 # 2. Пользовательский кодировщик для JSON
 class CustomJSONEncoder(json.JSONEncoder):
@@ -33,49 +32,34 @@ class CustomJSONEncoder(json.JSONEncoder):
             return list(iterable)
         return json.JSONEncoder.default(self, obj)
 
-# 3. Функция для выбора языка (определяется до create_app)
+# 3. Функция для выбора языка
 def select_locale():
-    # Пытаемся получить язык из сессии
     if 'language' in session and session['language'] in current_app.config['LANGUAGES'].keys():
         return session['language']
-    # Если нет, используем лучший вариант на основе заголовков запроса
     return request.accept_languages.best_match(current_app.config['LANGUAGES'].keys())
 
 
 def create_app(config_class=DevelopmentConfig):
-    """
-    Фабрика для создания и конфигурации экземпляра приложения Flask.
-    """
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
-
-    # Конфигурация для мультиязычности
     app.config['BABEL_DEFAULT_LOCALE'] = 'ru'
     app.config['LANGUAGES'] = {'en': 'English', 'ru': 'Русский'}
 
-    # Инициализация всех расширений
     CORS(app)
     db.init_app(app)
     Migrate(app, db)
     login_manager.init_app(app)
     babel.init_app(app, locale_selector=select_locale)
-    scheduler.init_app(app)
     app.json_encoder = CustomJSONEncoder
 
-    # Создание директории instance, если ее нет
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
         print(f"Ошибка при создании папки instance: {e}")
 
-    # Запуск планировщика задач (только в основном процессе)
-    if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        scheduler.start()
-
-    # Контекст приложения для регистрации Blueprints и других операций
     with app.app_context():
-        # Импорт моделей
-        from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, funnel_models, special_offer_models
+        # Импорт моделей (теперь только auth_models здесь для user_loader)
+        from .models import auth_models
 
         # Регистрация Blueprints
         from .web.main_routes import main_bp
@@ -98,29 +82,44 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(special_offer_bp, url_prefix='/specials')
         app.register_blueprint(manager_analytics_bp, url_prefix='/manager-analytics')
 
-        # Загрузчик пользователя для Flask-Login
         @login_manager.user_loader
         def load_user(user_id):
             return auth_models.User.query.get(int(user_id))
 
-        # Добавление задачи в планировщик
-        if scheduler.running and not scheduler.get_job('update_cbu_rate_job'):
-            scheduler.add_job(
-                id='update_cbu_rate_job',
-                func='app.services.currency_service:fetch_and_update_cbu_rate',
-                trigger='interval',
-                hours=1
-            )
-
-    # Единая функция, выполняемая перед каждым запросом
+    # --- НАЧАЛО: КЛЮЧЕВАЯ ЛОГИКА МУЛЬТИ-АРЕНДНОСТИ ---
     @app.before_request
     def before_request_tasks():
-        # Установка языка для шаблонов
         g.lang = str(select_locale())
 
-        # Проверка на файл блокировки обновления
-        lock_file_path = os.path.join(app.instance_path, 'update.lock')
-        if os.path.exists(lock_file_path) and request.endpoint != 'static':
-            return render_template('standolone/update_in_progress.html')
+        # Для страниц логина и статики подключение к базе компании не нужно
+        if request.endpoint and ('static' in request.endpoint or 'auth.' in request.endpoint):
+            return
+
+        # Если пользователь не аутентифицирован, ничего не делаем
+        if not current_user.is_authenticated:
+            return
+
+        # Получаем компанию текущего пользователя
+        company = current_user.company
+        if not company:
+            # Этого не должно случиться, если все пользователи привязаны к компаниям
+            return abort(403, "Пользователь не привязан к компании.")
+
+        # Создаем движок и сессию для базы данных этой компании
+        try:
+            engine = db.create_engine(company.db_uri, {})
+            # Сохраняем сессию в глобальном объекте `g` на время запроса
+            g.company_db_session = sessionmaker(bind=engine)()
+        except Exception as e:
+            # Обработка ошибки, если не удалось подключиться к базе компании
+            print(f"CRITICAL: Could not connect to tenant DB for {company.name}. Error: {e}")
+            return abort(500, "Не удалось подключиться к базе данных компании.")
+
+    @app.teardown_request
+    def teardown_request(exception=None):
+        # Гарантированно закрываем сессию после каждого запроса, чтобы избежать утечек
+        if hasattr(g, 'company_db_session'):
+            g.company_db_session.close()
+    # --- КОНЕЦ: КЛЮЧЕВАЯ ЛОГИКА МУЛЬТИ-АРЕНДНОСТИ ---
 
     return app

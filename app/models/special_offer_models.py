@@ -8,7 +8,6 @@ from dateutil.relativedelta import relativedelta
 
 class MonthlySpecial(db.Model):
     """Модель для хранения специальных предложений 'Квартира месяца'."""
-    __bind_key__ = 'planning_db'
     __tablename__ = 'monthly_specials'
 
     id = db.Column(db.Integer, primary_key=True)

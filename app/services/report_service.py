@@ -6,7 +6,7 @@ from sqlalchemy import func, extract, case
 from app.core.extensions import db
 import io
 from collections import defaultdict
-
+from flask import g
 # --- ИЗМЕНЕНИЯ ЗДЕСЬ: Обновляем импорты ---
 from app.models import planning_models
 from .data_service import get_all_complex_names
@@ -87,7 +87,7 @@ def generate_consolidated_report_by_period(year: int, period: str, property_type
 
 def get_fact_income_data(year: int, month: int, property_type: str):
     """Собирает ФАКТИЧЕСКИЕ поступления (статус 'Проведено')."""
-    results = db.session.query(
+    results = g.company_db_session.query(
         EstateHouse.complex_name, func.sum(FinanceOperation.summa).label('fact_income')
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
@@ -106,7 +106,7 @@ def get_expected_income_data(year: int, month: int, property_type: str):
     """
     Собирает ОЖИДАЕМЫЕ поступления (ИСКЛЮЧАЯ возвраты), их сумму и ID операций.
     """
-    results = db.session.query(
+    results = g.company_db_session.query(
         EstateHouse.complex_name,
         func.sum(FinanceOperation.summa).label('expected_income'),
         func.group_concat(FinanceOperation.id).label('income_ids')
@@ -130,7 +130,7 @@ def get_refund_data(year: int, month: int, property_type: str):
     """
     Собирает данные по ВОЗВРАТАМ, запланированным на указанный период.
     """
-    results = db.session.query(
+    results = g.company_db_session.query(
         func.sum(FinanceOperation.summa).label('total_refunds')
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .filter(
@@ -145,8 +145,7 @@ def get_refund_data(year: int, month: int, property_type: str):
 
 def get_plan_income_data(year: int, month: int, property_type: str):
     """Получает плановые данные по поступлениям."""
-    # Используем planning_models.SalesPlan
-    results = planning_models.SalesPlan.query.filter_by(year=year, month=month, property_type=property_type).all()
+    results = g.company_db_session.query(planning_models.SalesPlan).filter_by(year=year, month=month, property_type=property_type).all()
     return {row.complex_name: row.plan_income for row in results}
 
 def generate_ids_excel(ids_str: str):
@@ -169,7 +168,7 @@ def get_fact_data(year: int, month: int, property_type: str):
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
 
-    query = db.session.query(
+    query = g.company_db_session.query(
         EstateHouse.complex_name,
         func.count(EstateDeal.id).label('fact_units')
     ).join(
@@ -190,8 +189,7 @@ def get_fact_data(year: int, month: int, property_type: str):
 
 def get_plan_data(year: int, month: int, property_type: str):
     """Получает плановые данные из нашей таблицы SalesPlan."""
-    # Используем planning_models.SalesPlan
-    results = planning_models.SalesPlan.query.filter_by(
+    results = g.company_db_session.query(planning_models.SalesPlan).filter_by(
         year=year, month=month, property_type=property_type
     ).all()
     return {row.complex_name: row.plan_units for row in results}
@@ -280,18 +278,17 @@ def generate_plan_fact_report(year: int, month: int, property_type: str):
 def process_plan_from_excel(file_path: str, year: int, month: int):
     df = pd.read_excel(file_path)
     for index, row in df.iterrows():
-        # Используем planning_models.SalesPlan
-        plan_entry = planning_models.SalesPlan.query.filter_by(
+        plan_entry = g.company_db_session.query(planning_models.SalesPlan).filter_by(
             year=year, month=month, complex_name=row['ЖК'], property_type=row['Тип недвижимости']
         ).first()
         if not plan_entry:
             plan_entry = planning_models.SalesPlan(year=year, month=month, complex_name=row['ЖК'],
                                    property_type=row['Тип недвижимости'])
-            db.session.add(plan_entry)
+            g.company_db_session.add(plan_entry)
         plan_entry.plan_units = row['План, шт']
         plan_entry.plan_volume = row['План контрактации, UZS']
         plan_entry.plan_income = row['План поступлений, UZS']
-    db.session.commit()
+    g.company_db_session.commit()
     return f"Успешно обработано {len(df)} строк."
 
 
@@ -372,7 +369,7 @@ def get_monthly_summary_by_property_type(year: int, month: int):
 
 def get_fact_volume_data(year: int, month: int, property_type: str):
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    results = db.session.query(
+    results = g.company_db_session.query(
         EstateHouse.complex_name, func.sum(EstateDeal.deal_sum).label('fact_volume')
     ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id).join(EstateHouse,
                                                                         EstateSell.house_id == EstateHouse.id).filter(
@@ -387,18 +384,18 @@ def get_fact_volume_data(year: int, month: int, property_type: str):
 def get_plan_volume_data(year: int, month: int, property_type: str):
     """Получает плановые данные по объему контрактации."""
     # Используем planning_models.SalesPlan
-    results = planning_models.SalesPlan.query.filter_by(year=year, month=month, property_type=property_type).all()
+    results = g.company_db_session.query(planning_models.SalesPlan).filter_by(year=year, month=month, property_type=property_type).all()
     return {row.complex_name: row.plan_volume for row in results}
 
 
 def get_project_dashboard_data(complex_name: str, property_type: str = None):
     today = date.today()
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
-    houses_in_complex = EstateHouse.query.filter_by(complex_name=complex_name).order_by(EstateHouse.name).all()
+    houses_in_complex = g.company_db_session.query(EstateHouse).filter_by(complex_name=complex_name).order_by(EstateHouse.name).all()
     houses_data = []
 
     # Используем planning_models
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
 
     for house in houses_in_complex:
         house_details = {
@@ -410,7 +407,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         for prop_type_enum in planning_models.PropertyType:
             prop_type_value = prop_type_enum.value
 
-            total_units = db.session.query(func.count(EstateSell.id)).filter(
+            total_units = g.company_db_session.query(func.count(EstateSell.id)).filter(
                 EstateSell.house_id == house.id,
                 EstateSell.estate_sell_category == prop_type_value
             ).scalar()
@@ -418,7 +415,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             if total_units == 0:
                 continue
 
-            sold_units = db.session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
+            sold_units = g.company_db_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
                 EstateSell.house_id == house.id,
                 EstateSell.estate_sell_category == prop_type_value,
                 EstateDeal.deal_status_name.in_(sold_statuses)
@@ -430,14 +427,14 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
                 total_discount_rate = 0
                 if active_version:
                     # Используем planning_models
-                    discount = planning_models.Discount.query.filter_by(
+                    discount = g.company_db_session.query(planning_models.Discount).filter_by(
                         version_id=active_version.id, complex_name=complex_name,
                         property_type=prop_type_enum, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
                     ).first()
                     if discount:
                         total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
 
-                unsold_units = EstateSell.query.filter(
+                unsold_units = g.company_db_session.query(EstateSell).filter(
                     EstateSell.house_id == house.id,
                     EstateSell.estate_sell_category == prop_type_value,
                     EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
@@ -466,24 +463,24 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         if house_details["property_types_data"]:
             houses_data.append(house_details)
 
-    total_deals_volume = db.session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).join(EstateHouse).filter(
+    total_deals_volume = g.company_db_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).join(EstateHouse).filter(
         EstateHouse.complex_name == complex_name,
         EstateDeal.deal_status_name.in_(sold_statuses)
     ).scalar() or 0
 
-    total_income = db.session.query(func.sum(FinanceOperation.summa)).join(EstateSell).join(EstateHouse).filter(
+    total_income = g.company_db_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).join(EstateHouse).filter(
         EstateHouse.complex_name == complex_name,
         FinanceOperation.status_name == 'Проведено'
     ).scalar() or 0
 
     remainders_by_type = {}
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
 
     for prop_type_enum in planning_models.PropertyType:
         prop_type_value = prop_type_enum.value
         total_discount_rate = 0
         if active_version:
-            discount = planning_models.Discount.query.filter_by(
+            discount = g.company_db_session.query(planning_models.Discount).filter_by(
                 version_id=active_version.id,
                 complex_name=complex_name,
                 property_type=prop_type_enum,
@@ -492,7 +489,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             if discount:
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
 
-        remainder_sells_query = EstateSell.query.join(EstateHouse).filter(
+        remainder_sells_query = g.company_db_session.query(EstateSell).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateSell.estate_sell_category == prop_type_value,
             EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
@@ -521,7 +518,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         'plan_income': [0] * 12, 'fact_income': [0] * 12
     }
 
-    plans_query = planning_models.SalesPlan.query.filter_by(complex_name=complex_name, year=today.year)
+    plans_query = g.company_db_session.query(planning_models.SalesPlan).filter_by(complex_name=complex_name, year=today.year)
     if property_type:
         plans_query = plans_query.filter_by(property_type=property_type)
     for p in plans_query.all():
@@ -530,7 +527,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
     fact_volume_by_month = [0] * 12
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    volume_query = db.session.query(
+    volume_query = g.company_db_session.query(
         extract('month', effective_date).label('month'),
         func.sum(EstateDeal.deal_sum).label('total')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -545,7 +542,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     yearly_plan_fact['fact_volume'] = fact_volume_by_month
 
     fact_income_by_month = [0] * 12
-    income_query = db.session.query(
+    income_query = g.company_db_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
         func.sum(FinanceOperation.summa).label('total')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -558,7 +555,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     for row in income_query.group_by('month').all():
         fact_income_by_month[row.month - 1] = row.total or 0
     yearly_plan_fact['fact_income'] = fact_income_by_month
-    recent_deals = db.session.query(
+    recent_deals = g.company_db_session.query(
         EstateDeal.id, EstateDeal.deal_sum, EstateSell.estate_sell_category.label('property_type'),
         func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date).label('deal_date')
     ).join(EstateSell).join(EstateHouse).filter(
@@ -577,7 +574,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     type_to_analyze = property_type if property_type else 'Квартира'
 
     if type_to_analyze == 'Квартира':
-        base_query = db.session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
+        base_query = g.company_db_session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateDeal.deal_status_name.in_(sold_statuses),
             EstateSell.estate_sell_category == type_to_analyze
@@ -680,7 +677,7 @@ def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_
     Эталонная функция для расчета годовых фактических метрик (объем и поступления)
     с разбивкой по месяцам для ОДНОГО ЖК.
     """
-    house = EstateHouse.query.filter_by(complex_name=complex_name).first()
+    house = g.company_db_session.query(EstateHouse).filter_by(complex_name=complex_name).first()
     if not house:
         return {'volume': [0] * 12, 'income': [0] * 12}
 
@@ -690,7 +687,7 @@ def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_
 
     # --- ЭТАЛОННЫЙ ЗАПРОС ДЛЯ КОНТРАКТАЦИИ ---
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    volume_query = db.session.query(
+    volume_query = g.company_db_session.query(
         extract('month', effective_date).label('month'),
         func.sum(EstateDeal.deal_sum).label('total')
     ).join(EstateSell).filter(
@@ -705,7 +702,7 @@ def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_
         fact_volume_by_month[row.month - 1] = row.total or 0
 
     # --- ЭТАЛОННЫЙ ЗАПРОС ДЛЯ ПОСТУПЛЕНИЙ ---
-    income_query = db.session.query(
+    income_query = g.company_db_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
         func.sum(FinanceOperation.summa).label('total')
     ).join(EstateSell).filter(
@@ -734,7 +731,7 @@ def get_price_dynamics_data(complex_name: str, property_type: str = None):
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
 
-    query = db.session.query(
+    query = g.company_db_session.query(
         extract('year', effective_date).label('deal_year'),
         extract('month', effective_date).label('deal_month'),
         (EstateDeal.deal_sum / EstateSell.estate_area).label('price_per_sqm')
@@ -754,7 +751,7 @@ def get_price_dynamics_data(complex_name: str, property_type: str = None):
         query = query.filter(EstateSell.estate_sell_category == property_type)
 
     subquery = query.subquery()
-    monthly_avg_query = db.session.query(
+    monthly_avg_query = g.company_db_session.query(
         subquery.c.deal_year,
         subquery.c.deal_month,
         func.avg(subquery.c.price_per_sqm).label('avg_price')

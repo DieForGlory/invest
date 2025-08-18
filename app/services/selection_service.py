@@ -1,6 +1,6 @@
 # app/services/selection_service.py
 
-from flask import current_app, abort
+from flask import current_app, abort,g
 from sqlalchemy.orm import joinedload
 from ..core.extensions import db
 import json
@@ -28,7 +28,7 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     print(f"\n[SELECTION_SERVICE] 🔎 Поиск. Бюджет: {budget} {currency}. Тип: {property_type_str}")
 
     # Используем planning_models
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         print("[SELECTION_SERVICE] ❌ Не найдена активная версия скидок.")
         return {}
@@ -38,11 +38,11 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     discounts_map = {
         (d.complex_name, d.payment_method): d
         for d in
-        planning_models.Discount.query.filter_by(version_id=active_version.id, property_type=property_type_enum).all()
+        g.company_db_session.query(planning_models.Discount).filter_by(version_id=active_version.id, property_type=property_type_enum).all()
     }
-    excluded_sell_ids = {e.sell_id for e in ExcludedSell.query.all()}
+    excluded_sell_ids = {e.sell_id for e in g.company_db_session.query(ExcludedSell).all()}
 
-    query = db.session.query(EstateSell).options(
+    query = g.company_db_session.query(EstateSell).options(
         joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_sell_category == property_type_enum.value,
@@ -119,10 +119,10 @@ def get_apartment_card_data(sell_id: int):
     """
     Собирает все данные для детальной карточки квартиры.
     """
-    sell = db.session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
+    sell = g.company_db_session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
     if not sell: abort(404)
 
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 
@@ -131,7 +131,7 @@ def get_apartment_card_data(sell_id: int):
     except ValueError:
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 
-    all_discounts_for_property_type = planning_models.Discount.query.filter_by(
+    all_discounts_for_property_type = g.company_db_session.query(planning_models.Discount).filter_by(
         version_id=active_version.id,
         property_type=property_type_enum,
         complex_name=sell.house.complex_name

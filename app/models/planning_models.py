@@ -19,7 +19,6 @@ class PaymentMethod(enum.Enum):
 
 
 class DiscountVersion(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'discount_versions'
     id = db.Column(db.Integer, primary_key=True)
     version_number = db.Column(db.Integer, nullable=False, unique=True)
@@ -34,7 +33,6 @@ class DiscountVersion(db.Model):
 
 
 class SalesPlan(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'sales_plans'
     id = db.Column(db.Integer, primary_key=True)
     complex_name = db.Column(db.String(255), nullable=False, index=True)
@@ -50,7 +48,6 @@ class SalesPlan(db.Model):
 
 
 class Discount(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'discounts'
     id = db.Column(db.Integer, primary_key=True)
     version_id = db.Column(db.Integer, db.ForeignKey('discount_versions.id'), nullable=False, index=True)
@@ -74,7 +71,6 @@ class Discount(db.Model):
 
 
 class ComplexComment(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'complex_comments'
     id = db.Column(db.Integer, primary_key=True)
     version_id = db.Column(db.Integer, db.ForeignKey('discount_versions.id'), nullable=False)
@@ -87,7 +83,6 @@ class ComplexComment(db.Model):
 
 
 class CalculatorSettings(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'calculator_settings'
     id = db.Column(db.Integer, primary_key=True)
     standard_installment_whitelist = db.Column(db.Text, nullable=True)
@@ -98,7 +93,6 @@ class CalculatorSettings(db.Model):
 
 
 class ManagerSalesPlan(db.Model):
-    __bind_key__ = 'planning_db'
     __tablename__ = 'manager_sales_plans'
 
     id = db.Column(db.Integer, primary_key=True)

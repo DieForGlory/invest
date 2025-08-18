@@ -2,19 +2,9 @@
 
 import os
 
-
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-
-    # URI для подключения к исходной базе данных MySQL (для импорта)
-    # Используйте переменные окружения для безопасности
-    SOURCE_MYSQL_URI = (
-        f"mysql+pymysql://"
-        f"macro_bi_cmp_528:p[8qG^]Qf3v[qr*1"  # <-- Замените на ваши данные
-        f"@172.16.0.199:9906"  # <-- Правильный IP и порт
-        f"/macro_bi_cmp_528"  # <-- Замените на ваши данные
-    )
 
     # Настройки для отправки Email
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'mail.gh.uz')
@@ -25,15 +15,8 @@ class Config:
     MAIL_RECIPIENTS = ['d.plakhotnyi@gh.uz']
     USD_TO_UZS_RATE = 13050.0
 
-
-# --- ИЗМЕНЕНИЯ НУЖНО ВНЕСТИ ЗДЕСЬ ---
 class DevelopmentConfig(Config):
     DEBUG = True
-
-    # Основная база данных
-    SQLALCHEMY_DATABASE_URI = os.environ.get('MAIN_DATABASE_URL') or 'sqlite:///main_app.db'
-
-    # Оставляем только одну дополнительную БД
-    SQLALCHEMY_BINDS = {
-        'planning_db': os.environ.get('PLANNING_DATABASE_URL') or 'sqlite:///planning.db'
-    }
+    # Указываем путь к нашей новой "управляющей" базе данных.
+    # Здесь будут храниться пользователи и информация о компаниях-клиентах.
+    SQLALCHEMY_DATABASE_URI = os.environ.get('CONTROL_DATABASE_URL') or 'sqlite:///control_app.db'

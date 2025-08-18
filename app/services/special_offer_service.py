@@ -9,7 +9,7 @@ from app.core.extensions import db
 from app.models.special_offer_models import MonthlySpecial
 from app.models.estate_models import EstateSell, EstateHouse
 from datetime import date
-
+from flask import g
 RESERVATION_FEE = 3_000_000
 # --- Константы для загрузки изображений ---
 UPLOAD_FOLDER = 'uploads/floor_plans'  # Путь внутри 'static'
@@ -71,8 +71,8 @@ def add_special_offer(sell_id, usp_text, extra_discount, image_file):
         floor_plan_image_filename=saved_filename,
         expires_at=MonthlySpecial.set_initial_expiry()  # Устанавливаем срок до конца текущего месяца
     )
-    db.session.add(new_special)
-    db.session.commit()
+    g.company_db_session.add(new_special)
+    g.company_db_session.commit()
     return new_special
 
 
@@ -104,7 +104,7 @@ def get_active_special_offers():
     sell_ids = list(specials_map.keys())
 
     # --- Шаг 2: Получаем квартиры из основной базы ---
-    sells_data = db.session.query(
+    sells_data = g.company_db_session.query(
         EstateSell, EstateHouse
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
@@ -186,7 +186,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     }
 
     # --- Шаг 2: Получаем детали квартиры из основной базы ---
-    sell_data = db.session.query(EstateSell, EstateHouse).join(EstateHouse,
+    sell_data = g.company_db_session.query(EstateSell, EstateHouse).join(EstateHouse,
                                                                EstateSell.house_id == EstateHouse.id).filter(
         EstateSell.id == sell_id).first()
     if not sell_data:
@@ -246,7 +246,7 @@ def get_all_special_offers():
     sell_ids = list(specials_map.keys())
 
     # Шаг 2: Получаем детали для этих квартир из основной базы
-    sells_data = db.session.query(
+    sells_data = g.company_db_session.query(
         EstateSell, EstateHouse
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
@@ -296,7 +296,7 @@ def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
         saved_filename = _optimize_and_save_image(image_file)
         special_to_update.floor_plan_image_filename = saved_filename
 
-    db.session.commit()
+    g.company_db_session.commit()
     return special_to_update
 
 
@@ -310,15 +310,15 @@ def delete_special_offer(special_id):
         os.remove(image_path)
 
     # Удаляем запись из базы данных
-    db.session.delete(special_to_delete)
-    db.session.commit()
+    g.company_db_session.delete(special_to_delete)
+    g.company_db_session.commit()
 
 
 def extend_special_offer(special_id: int):
     """Продлевает срок действия предложения."""
     special = MonthlySpecial.query.get_or_404(special_id)
     special.extend_offer()
-    db.session.commit()
+    g.company_db_session.commit()
     return special
 
 # Тут можно добавить функции update_special_offer и delete_special_offer по аналогии

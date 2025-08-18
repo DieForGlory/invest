@@ -2,7 +2,7 @@ from app.models.estate_models import EstateSell, EstateHouse
 from app.core.extensions import db
 import time
 from sqlalchemy import distinct
-
+from flask import g
 
 def get_sells_with_house_info(page, per_page):
     """
@@ -15,7 +15,7 @@ def get_sells_with_house_info(page, per_page):
     try:
         # Запрос теперь проще. Мы получаем объекты EstateSell, связанные с EstateHouse.
         # Вместо .all() используем .paginate()
-        pagination = db.session.query(EstateSell).join(EstateHouse).order_by(EstateSell.id.desc()).paginate(
+        pagination = g.company_db_session.query(EstateSell).join(EstateHouse).order_by(EstateSell.id.desc()).paginate(
             page=page,
             per_page=per_page,
             error_out=False
@@ -38,7 +38,7 @@ def get_all_complex_names():
     print("[DATA SERVICE] _names Запрос уникальных названий ЖК...")
     try:
         # Выполняем запрос, который выбирает только уникальные (distinct) названия
-        results = db.session.query(distinct(EstateHouse.complex_name)).all()
+        results = g.company_db_session.query(distinct(EstateHouse.complex_name)).all()
         # Преобразуем результат (список кортежей) в простой список строк
         complex_names = [row[0] for row in results]
         print(f"[DATA SERVICE] 📈 Найдено уникальных ЖК: {len(complex_names)}")
@@ -55,10 +55,10 @@ def get_filter_options():
     print("[DATA SERVICE] 🔎 Запрос уникальных значений для фильтров...")
     try:
         # Запрос уникальных этажей. Исключаем None и сортируем.
-        floors = sorted([f[0] for f in db.session.query(distinct(EstateSell.estate_floor)).filter(
+        floors = sorted([f[0] for f in g.company_db_session.query(distinct(EstateSell.estate_floor)).filter(
             EstateSell.estate_floor.isnot(None)).all()])
         # Запрос уникальных комнат. Исключаем None и сортируем.
-        rooms = sorted([r[0] for r in db.session.query(distinct(EstateSell.estate_rooms)).filter(
+        rooms = sorted([r[0] for r in g.company_db_session.query(distinct(EstateSell.estate_rooms)).filter(
             EstateSell.estate_rooms.isnot(None)).all()])
 
         print(f"[DATA SERVICE] ✔️ Найдено этажей: {len(floors)}, комнат: {len(rooms)}")

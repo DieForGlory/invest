@@ -4,6 +4,7 @@ from collections import defaultdict
 from app.core.extensions import db
 import pandas as pd
 import io
+from flask import g
 
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модели из их нового местоположения
@@ -18,10 +19,10 @@ def get_inventory_summary_data():
     учитывая исключенные ЖК.
     """
     # 1. Получаем список исключенных ЖК
-    excluded_complex_names = {c.complex_name for c in ExcludedComplex.query.all()}
+    excluded_complex_names = {c.complex_name for c in g.company_db_session.query(ExcludedComplex).all()}
 
     # 2. Получаем активную версию скидок (теперь из planning_models)
-    active_version = DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return {}, {}
 
@@ -33,7 +34,7 @@ def get_inventory_summary_data():
 
     # 3. Запрос к базе данных (без изменений, так как модели из main_db)
     valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"] # <-- Добавлен статус 'Бронь'
-    unsold_sells_query = db.session.query(EstateSell).options(
+    unsold_sells_query = g.company_db_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_sell_status_name.in_(valid_statuses),
