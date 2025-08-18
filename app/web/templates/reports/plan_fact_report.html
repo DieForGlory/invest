@@ -1,0 +1,180 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/report_style.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">{{ _('Сводный план-фактный отчет') }}</h1>
+    <a href="{{ url_for('report.export_plan_fact', year=selected_year, month=selected_month, property_type=selected_prop_type, period=selected_period) }}" class="btn btn-outline-success">
+        <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Экспорт') }}
+    </a>
+</div>
+
+<div class="accordion mb-4" id="filterAccordion">
+    <div class="card">
+        <div class="card-header" id="filterHeader">
+            <h2 class="mb-0">
+                <button class="btn btn-link btn-block text-start" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFilters" aria-expanded="true" aria-controls="collapseFilters">
+                    <i class="bi bi-funnel-fill me-2"></i> {{ _('Фильтры и параметры отчета') }}
+                </button>
+            </h2>
+        </div>
+        <div id="collapseFilters" class="collapse" aria-labelledby="filterHeader" data-bs-parent="#filterAccordion">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('report.plan_fact_report') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-lg col-md-4"><label for="year" class="form-label">{{ _('Год') }}</label><select name="year" id="year" class="form-select">{% for y in years %}<option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>{% endfor %}</select></div>
+                        <div class="col-lg col-md-4">
+                            <label for="period" class="form-label">{{ _('Период') }}</label>
+                            <select name="period" id="period" class="form-select">
+                                <option value="monthly" {% if selected_period == 'monthly' %}selected{% endif %}>{{ _('По месяцам') }}</option>
+                                <option value="q1" {% if selected_period == 'q1' %}selected{% endif %}>{{ _('1-й квартал') }}</option>
+                                <option value="q2" {% if selected_period == 'q2' %}selected{% endif %}>{{ _('2-й квартал') }}</option>
+                                <option value="q3" {% if selected_period == 'q3' %}selected{% endif %}>{{ _('3-й квартал') }}</option>
+                                <option value="q4" {% if selected_period == 'q4' %}selected{% endif %}>{{ _('4-й квартал') }}</option>
+                                <option value="h1" {% if selected_period == 'h1' %}selected{% endif %}>{{ _('1-е полугодие') }}</option>
+                                <option value="h2" {% if selected_period == 'h2' %}selected{% endif %}>{{ _('2-е полугодие') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-lg col-md-4">
+                            <label for="month" class="form-label">{{ _('Месяц') }}</label>
+                            <select name="month" id="month" class="form-select">
+                                {% for m in months %}<option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ '%02d'|format(m) }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-lg col-md-6">
+                            <label for="property_type" class="form-label">{{ _('Тип недвижимости') }}</label>
+                            <select name="property_type" id="property_type" class="form-select">
+                                {% for pt in property_types %}<option value="{{ pt.value }}" {% if pt.value == selected_prop_type %}selected{% endif %}>{{ _(pt.value) }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-lg-auto col-md-3"><button type="submit" class="btn btn-primary w-100">{{ _('Показать') }}</button></div>
+                        <div class="col-lg-auto col-md-3">
+                            <div class="form-check form-switch fs-5">
+                                <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+                                <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
+                            </div>
+                        </div>
+                        <div class="col-lg-auto col-md-4">
+                            <div class="form-check form-switch fs-5 pt-4">
+                                <input class="form-check-input" type="checkbox" role="switch" id="hideZeroPlanToggle">
+                                <label class="form-check-label text-muted" for="hideZeroPlanToggle">{{ _('Скрыть нулевые планы') }}</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card summary-panel mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-lg-4 col-md-12 summary-card">
+                <div class="icon-shape icon-units"><i class="bi bi-building-check"></i></div>
+                <div class="w-100">
+                    <span class="summary-label">{{ _('Продано, шт.') }}</span>
+
+                    <div class="d-flex justify-content-between align-items-baseline">
+                        <h4 class="summary-value mb-0">{{ totals.fact_units }} <small class="text-muted fw-normal">/ {{ totals.plan_units }}</small></h4>
+                        {% set p_units = totals.percent_fact_units %}
+                        <span class="summary-percent p-text-{{ 'success' if p_units >= 95 else 'warning' if p_units >= 75 else 'danger' }}">{{ "%.0f"|format(p_units) }}%</span>
+                    </div>
+
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar p-bg-{{ 'success' if p_units >= 95 else 'warning' if p_units >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_units }}%;" aria-valuenow="{{ p_units }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6 summary-card">
+                <div class="icon-shape icon-volume"><i class="bi bi-file-earmark-text"></i></div>
+                <div>
+                    <span class="summary-label">{{ _('Контрактация') }}</span>
+                    <h4 class="summary-value currency-value" data-uzs-value="{{ totals.fact_volume }}">{{ "{:,.0f}".format(totals.fact_volume)|replace(',', ' ') }}</h4>
+                    <span class="summary-plan currency-value" data-uzs-value="{{ totals.plan_volume }}">{{ _('План:') }} {{ "{:,.0f}".format(totals.plan_volume)|replace(',', ' ') }}</span>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6 summary-card">
+                <div class="icon-shape icon-income"><i class="bi bi-cash-stack"></i></div>
+                <div>
+                    <span class="summary-label">{{ _('Поступления') }}</span>
+                    <h4 class="summary-value currency-value" data-uzs-value="{{ totals.fact_income }}">{{ "{:,.0f}".format(totals.fact_income)|replace(',', ' ') }}</h4>
+                    <span class="summary-plan currency-value" data-uzs-value="{{ totals.plan_income }}">{{ _('План:') }} {{ "{:,.0f}".format(totals.plan_income)|replace(',', ' ') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="report-list">
+    {% for row in data %}
+    <div class="card report-row mb-2" data-plan-units="{{ row.plan_units }}">
+        <div class="row g-0 align-items-center">
+            <div class="col-lg-3">
+                <div class="report-row-title">
+                    <a href="{{ url_for('report.project_dashboard', complex_name=row.complex_name) }}">{{ row.complex_name }}</a>
+                </div>
+            </div>
+            <div class="col-lg-9">
+                <div class="row">
+                    <div class="col-md-4 metric-block">
+                        <div class="metric-label">{{ _('Продано, шт.') }}</div>
+                        <div class="metric-value">{{ "{:,.0f}".format(row.fact_units) }} / <span class="plan-value">{{ "{:,.0f}".format(row.plan_units) }}</span></div>
+                        {% set p_units = row.percent_fact_units %}
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar p-{{ 'success' if p_units >= 95 else 'warning' if p_units >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_units }}%;" aria-valuenow="{{ p_units }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 metric-block">
+                        <div class="metric-label">{{ _('Контрактация') }}</div>
+                        <div class="metric-value currency-value" data-uzs-value="{{ row.fact_volume }}">{{ "{:,.0f}".format(row.fact_volume)|replace(',', ' ') }}</div>
+                        {% set p_vol = row.percent_fact_volume %}
+                         <div class="progress" style="height: 6px;">
+                            <div class="progress-bar p-{{ 'success' if p_vol >= 95 else 'warning' if p_vol >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_vol }}%;" aria-valuenow="{{ p_vol }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 metric-block">
+                        <div class="metric-label">{{ _('Поступления') }}</div>
+                        <div class="metric-value currency-value" data-uzs-value="{{ row.fact_income }}">{{ "{:,.0f}".format(row.fact_income)|replace(',', ' ') }}</div>
+                        {% set p_inc = row.percent_fact_income %}
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar p-{{ 'success' if p_inc >= 95 else 'warning' if p_inc >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_inc }}%;" aria-valuenow="{{ p_inc }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
+            const periodSelect = document.getElementById('period');
+            const monthSelect = document.getElementById('month');
+
+            function toggleMonthSelect() {
+                const monthCol = monthSelect.closest('.col-lg');
+                if (periodSelect.value === 'monthly') {
+                    monthSelect.disabled = false;
+                    if(monthCol) monthCol.style.display = 'block';
+                } else {
+                    monthSelect.disabled = true;
+                    if(monthCol) monthCol.style.display = 'none';
+                }
+            }
+            toggleMonthSelect();
+            periodSelect.addEventListener('change', toggleMonthSelect);
+        });
+    </script>
+{% endblock %}

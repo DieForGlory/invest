@@ -1,0 +1,234 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ _('Действующая система скидок') }}</h1>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="{{ _('🔍 Введите название ЖК для поиска...') }}">
+    </div>
+    <div class="col-md-4 d-flex align-items-center justify-content-start">
+        <div class="form-check form-switch fs-5">
+            <input class="form-check-input" type="checkbox" role="switch" id="showOnlyCadastreSwitch">
+            <label class="form-check-label text-muted" for="showOnlyCadastreSwitch">{{ _('Показывать только с датой кадастра') }}</label>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover table-striped mb-0" id="discountsTable">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col" class="sortable" data-sort="complex-name">{{ _('Название ЖК') }}</th>
+                    <th scope="col" class="text-center sortable" data-sort="avg-price">{{ _('Ср. цена дна') }}</th>
+                    <th scope="col" class="text-center sortable" data-sort="cadastre-date">{{ _('Мес. до кадастра') }}</th>
+                    <th scope="col" class="text-center sortable" data-sort="payment-100">{{ _('100%% оплата') }}</th>
+                    <th scope="col" class="text-center">{{ _('Доп. скидки') }}</th>
+                    <th scope="col"></th> </tr>
+            </thead>
+            <tbody>
+                {% if structured_discounts %}
+                    {% for complex_name, data in structured_discounts.items() %}
+                        {% if data.summary.sum_100_payment > 0 or data.summary.sum_mortgage > 0 %}
+                        <tr data-complex-name="{{ complex_name|lower }}"
+                            data-cadastre-date-exists="{{ 'true' if data.summary.months_to_cadastre is not none else 'false' }}">
+
+                            <td data-value="{{ complex_name }}"><strong>{{ complex_name }}</strong></td>
+
+                            <td class="text-center" data-value="{{ data.summary.avg_remainder_price_sqm if data.summary.avg_remainder_price_sqm > 0 else -1 }}">
+                                {% if current_user.role.name in ['ADMIN', 'MANAGER'] and data.summary.avg_remainder_price_sqm > 0 %}
+                                    <span class="fw-bold text-primary">${{ "{:,.0f}".format(data.summary.avg_remainder_price_sqm) }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger-subtle border border-danger-subtle text-danger-emphasis">{{ _('Распроданы') }}</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center" data-value="{{ data.summary.months_to_cadastre if data.summary.months_to_cadastre is not none else -1 }}">
+                                {% if data.summary.months_to_cadastre is not none %}
+                                    <span class="fw-bold">{{ data.summary.months_to_cadastre }}</span>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center" data-value="{{ data.summary.sum_100_payment }}">
+                                <span class="fw-bold">{{ "%.1f"|format(data.summary.sum_100_payment * 100) }}%</span>
+                            </td>
+
+                            <td class="text-center">
+                                {% for tag in data.summary.available_tags|sort %}
+                                    {% set badge_class = 'badge-additional-discount' %}
+                                    <span class="badge rounded-pill {{ badge_class }} me-1">{{ tag }}</span>
+                                {% endfor %}
+                            </td>
+
+                            <td class="text-end">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#detailsModal-{{ loop.index }}">
+                                    {{ _('Детали') }} <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center p-4">{{ _('В системе пока нет настроенных скидок.') }}</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if structured_discounts %}
+    {% for complex_name, data in structured_discounts.items() %}
+    <div class="modal fade" id="detailsModal-{{ loop.index }}" tabindex="-1" aria-labelledby="detailsModalLabel-{{ loop.index }}" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailsModalLabel-{{ loop.index }}">{{ _('Подробные скидки: ') }}{{ complex_name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% for prop_type, discounts in data.details.items() if discounts %}
+                        <h6 class="mt-3">{{ _('Тип недвижимости') }}: <span class="badge bg-info-subtle border border-info-subtle text-info-emphasis rounded-pill">{{ _(prop_type) }}</span></h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mt-2">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>{{ _('Тип оплаты') }}</th><th>{{ _('Дата кадастра') }}</th><th>{{ _('МПП') }}</th><th>{{ _('РОП') }}</th><th>{{ _('КД') }}</th><th>{{ _('ОПТ') }}</th><th>{{ _('ГД') }}</th><th>{{ _('Холдинг') }}</th><th>{{ _('Акция') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for discount in discounts|sort(attribute='payment_method.value') %}
+                                        <tr>
+                                            <td><strong>{{ _(discount.payment_method.value.replace('%', '%%')) }}</strong></td>
+                                            <td>{{ discount.cadastre_date.strftime('%d.%m.%Y') if discount.cadastre_date else '—' }}</td>
+                                            <td>{% if discount.mpp > 0 %}{{ "%.1f"|format(discount.mpp * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.rop > 0 %}{{ "%.1f"|format(discount.rop * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.kd > 0 %}{{ "%.1f"|format(discount.kd * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.opt > 0 %}{{ "%.1f"|format(discount.opt * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.gd is not none and discount.gd > 0 %}{{ "%.1f"|format(discount.gd * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.holding > 0 %}{{ "%.1f"|format(discount.holding * 100) }}%{% else %}—{% endif %}</td>
+                                            <td>{% if discount.action > 0 %}{{ "%.1f"|format(discount.action * 100) }}%{% else %}—{% endif %}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% endif %}
+
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('searchInput');
+    const showOnlyCadastreSwitch = document.getElementById('showOnlyCadastreSwitch');
+    const table = document.getElementById('discountsTable');
+    const tableBody = table.querySelector('tbody');
+    const tableRows = Array.from(tableBody.querySelectorAll('tr'));
+
+    // 1. ФИЛЬТРАЦИЯ
+    function applyFilters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const showCadastreOnly = showOnlyCadastreSwitch.checked;
+
+        tableRows.forEach(row => {
+            if (!row.dataset.complexName) return; // Пропускаем строку "нет данных"
+
+            const complexName = row.dataset.complexName;
+            const hasCadastreDate = row.dataset.cadastreDateExists === 'true';
+
+            const searchMatch = complexName.includes(searchTerm);
+            const cadastreMatch = !showCadastreOnly || hasCadastreDate;
+
+            row.style.display = (searchMatch && cadastreMatch) ? '' : 'none';
+        });
+    }
+
+    // 2. СОРТИРОВКА
+    const headers = table.querySelectorAll('th.sortable');
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            const sortKey = header.dataset.sort;
+            const sortOrder = header.classList.contains('sorted-asc') ? 'desc' : 'asc';
+
+            headers.forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+            header.classList.add(sortOrder === 'asc' ? 'sorted-asc' : 'sorted-desc');
+
+            const sortedRows = Array.from(tableBody.querySelectorAll('tr'))
+                .filter(row => row.dataset.complexName) // Исключаем не-данные строки
+                .sort((a, b) => {
+                    const aCell = a.querySelector(`td[data-value]`);
+                    const bCell = b.querySelector(`td[data-value]`);
+
+                    // Находим нужную ячейку по индексу заголовка
+                    const cellIndex = Array.from(header.parentNode.children).indexOf(header);
+                    const aVal = a.children[cellIndex].dataset.value;
+                    const bVal = b.children[cellIndex].dataset.value;
+
+                    const aNum = parseFloat(aVal);
+                    const bNum = parseFloat(bVal);
+
+                    let compareResult;
+                    // Если значения - числа, сортируем как числа
+                    if (!isNaN(aNum) && !isNaN(bNum)) {
+                        compareResult = aNum - bNum;
+                    } else { // Иначе - как строки
+                        compareResult = aVal.localeCompare(bVal, undefined, { numeric: true });
+                    }
+
+                    return sortOrder === 'asc' ? compareResult : -compareResult;
+                });
+
+            // Перестраиваем tbody
+            sortedRows.forEach(row => tableBody.appendChild(row));
+        });
+    });
+
+    // Привязка событий
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+    if (showOnlyCadastreSwitch) showOnlyCadastreSwitch.addEventListener('change', applyFilters);
+
+    applyFilters();
+});
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+/* Добавляем иконки для сортировки */
+th.sortable {
+    cursor: pointer;
+    position: relative;
+}
+th.sortable::after {
+    content: ' ▲';
+    position: absolute;
+    right: 10px;
+    opacity: 0.2;
+    transform: rotate(180deg);
+}
+th.sortable.sorted-asc::after {
+    opacity: 1;
+    transform: rotate(0deg);
+}
+th.sortable.sorted-desc::after {
+    opacity: 1;
+    transform: rotate(180deg);
+}
+</style>
+{% endblock %}

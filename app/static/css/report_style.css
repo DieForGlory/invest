@@ -1,0 +1,130 @@
+/* :::::: ЦВЕТОВАЯ ПАЛИТРА ДЛЯ ОТЧЕТОВ :::::: */
+:root {
+    --p-success: #198754;
+    --p-warning: #ffc107;
+    --p-danger:  #dc3545;
+    --p-info:    #0dcaf0;
+}
+
+/* Цвет фона для прогресс-баров */
+.p-bg-success { background-color: var(--p-success); }
+.p-bg-warning { background-color: var(--p-warning); }
+.p-bg-danger  { background-color: var(--p-danger); }
+.p-bg-info    { background-color: var(--p-info); }
+
+/* Цвет для ТЕКСТА процентов */
+.p-text-success { color: var(--p-success); }
+.p-text-warning { color: var(--p-warning); }
+.p-text-danger  { color: var(--p-danger); }
+.p-text-info    { color: var(--p-info); }
+
+
+/* :::::: ФИЛЬТРЫ :::::: */
+.accordion .card-header {
+    padding: 0;
+    background-color: var(--mc-element-bg);
+}
+.accordion .btn-link {
+    width: 100%;
+    text-decoration: none;
+    color: var(--mc-text-primary);
+    padding: 1rem 1.25rem;
+    font-weight: 500;
+}
+.accordion .btn-link:hover {
+    background-color: var(--mc-bg-gray);
+}
+.accordion .collapse {
+    border-top: 1px solid var(--mc-border-color);
+}
+
+/* :::::: ГЛАВНАЯ СВОДНАЯ ПАНЕЛЬ :::::: */
+.summary-panel .summary-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+}
+.summary-panel .summary-card:not(:last-child) {
+    border-right: 1px solid var(--mc-border-color);
+}
+
+.icon-shape {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-right: 1rem;
+    color: #fff;
+    font-size: 1.5rem;
+}
+.icon-shape.icon-units { background-color: var(--p-info); }
+.icon-shape.icon-volume { background-color: var(--p-success); }
+.icon-shape.icon-income { background-color: var(--p-warning); }
+
+.summary-label {
+    font-size: 0.9rem;
+    color: var(--mc-text-secondary);
+}
+.summary-value {
+    font-weight: 700;
+}
+.summary-plan {
+    font-size: 0.9rem;
+    color: var(--mc-text-secondary);
+}
+
+/* Стили для нового блока с процентами */
+.summary-percent {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+
+/* :::::: СПИСОК ПРОЕКТНЫХ КАРТОЧЕК :::::: */
+.report-row {
+    padding: 1rem;
+    transition: box-shadow 0.2s ease-in-out;
+}
+.report-row:hover {
+    box-shadow: var(--mc-card-shadow);
+    transform: translateY(-2px);
+}
+.report-row-title {
+    padding-right: 1rem;
+    font-weight: 500;
+    font-size: 1.1rem;
+}
+.report-row-title a {
+    text-decoration: none;
+    color: var(--mc-primary-blue);
+}
+
+.metric-block {
+    padding: 0.5rem 1rem;
+}
+.metric-block:not(:last-child) {
+    border-right: 1px solid var(--mc-border-color);
+}
+.metric-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--mc-text-secondary);
+    margin-bottom: 0.25rem;
+}
+.metric-value {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+.metric-value .plan-value {
+    font-weight: 400;
+    font-size: 0.9rem;
+    color: var(--mc-text-secondary);
+}
+.metric-block .progress {
+    height: 6px;
+    margin-top: 0.5rem;
+}

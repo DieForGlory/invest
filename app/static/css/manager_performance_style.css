@@ -1,0 +1,166 @@
+/* Стили для карточек на странице обзора менеджеров */
+.manager-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.manager-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15) !important;
+}
+
+/* =================================================================== */
+/* НОВЫЙ МОДУЛЬ ДЛЯ ОТОБРАЖЕНИЯ KPI КАРТОЧЕК (НАЧАЛО)              */
+/* =================================================================== */
+
+/* Контейнер для карточек (использует Grid для гибкого расположения) */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4 колонки */
+    gap: 24px; /* Расстояние между карточками */
+    width: 100%;
+}
+
+/* Стили самой KPI карточки */
+.kpi-card {
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Стили для иконки в карточке */
+.kpi-icon {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #fff;
+}
+
+/* Контентная часть карточки */
+.kpi-content {
+    flex-grow: 1;
+}
+
+.kpi-label {
+    font-size: 14px;
+    color: #6c757d;
+    margin-bottom: 4px;
+}
+
+.kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1.2;
+}
+
+.kpi-secondary {
+    font-size: 14px;
+    color: #495057;
+    margin-top: 8px;
+}
+
+/* Стили для карточки с проданными юнитами */
+.kpi-units-list {
+    width: 100%;
+    font-size: 16px;
+}
+
+.kpi-units-list .unit-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kpi-units-list .unit-item .badge {
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+
+/* Стили для карточки с рекордами */
+.kpi-records-list {
+    margin-top: 8px;
+}
+
+.kpi-records-list .record-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 14px;
+    color: #6c757d;
+}
+
+.kpi-records-list .record-item + .record-item {
+   margin-top: 4px;
+}
+
+.kpi-records-list .record-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+}
+
+
+/* Цветовые схемы для иконок */
+.kpi-icon.bg-purple { background-color: #6f42c1; }
+.kpi-icon.bg-teal { background-color: #20c997; }
+.kpi-icon.bg-orange { background-color: #fd7e14; }
+.kpi-icon.bg-gold { background-color: #ffc107; }
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 992px) {
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 колонки на планшетах */
+    }
+}
+@media (max-width: 576px) {
+    .kpi-grid {
+        grid-template-columns: 1fr; /* 1 колонка на телефонах */
+    }
+}
+/* =================================================================== */
+/* НОВЫЙ МОДУЛЬ ДЛЯ ОТОБРАЖЕНИЯ KPI КАРТОЧЕК (КОНЕЦ)                */
+/* =================================================================== */
+
+
+/* =================================================================== */
+/* ИСПРАВЛЕНИЕ ДЛЯ ПРОЦЕНТОВ В ТАБЛИЦЕ                             */
+/* =================================================================== */
+.table-responsive .table .badge {
+    color: #fff; /* Белый цвет текста по умолчанию */
+    font-size: 0.8em;
+    font-weight: 700;
+    padding: .5em .8em;
+}
+
+/* Цвет фона для разных состояний. Имена классов взяты из вашего HTML */
+.table-responsive .table .badge.p-success {
+    background-color: #28a745 !important;
+}
+
+.table-responsive .table .badge.p-warning {
+    background-color: #ffc107 !important;
+    color: #212529; /* Темный текст для лучшей читаемости на желтом */
+}
+
+.table-responsive .table .badge.p-danger {
+    background-color: #dc3545 !important;
+}

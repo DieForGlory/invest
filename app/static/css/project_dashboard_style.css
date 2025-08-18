@@ -1,0 +1,127 @@
+/* :::::: Стили для страницы "Аналитика по проекту" :::::: */
+
+/* Стили для карточек с ключевыми показателями (KPI) */
+.kpi-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--mc-text-secondary); /* Используем переменную из main.css */
+    margin-bottom: 0.25rem;
+}
+
+.kpi-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: var(--bs-body-color); /* Используем переменную из main.css */
+}
+
+/* Стили для контейнеров графиков */
+.dashboard-chart-container {
+    position: relative;
+    /* Устанавливаем конкретную высоту */
+    height: 450px;
+    width: 100%;
+}
+
+/* Модификатор для маленьких графиков (в ряду из 3-х) */
+.dashboard-chart-container.dashboard-chart-sm {
+    height: 300px;
+}
+
+/* =================================================================== */
+/* :::::: НОВЫЕ СТИЛИ для KPI-карточек на странице менеджера :::::: */
+/* =================================================================== */
+
+.kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem; /* Расстояние между иконкой и контентом */
+    padding: 1.5rem;
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.75rem; /* Более скругленные углы */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04); /* Мягкая тень */
+    transition: all 0.2s ease-in-out; /* Плавный переход для ховера */
+}
+
+.kpi-card:hover {
+    transform: translateY(-5px); /* Эффект "приподнимания" при наведении */
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.08);
+}
+
+.kpi-icon {
+    flex-shrink: 0; /* Иконка не будет сжиматься */
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%; /* Круглая форма */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+}
+
+/* Новые цвета для иконок (светлый фон, цветная иконка) */
+.kpi-icon.icon-volume {
+    background-color: var(--bs-success-bg-subtle);
+    color: var(--bs-success-text-emphasis);
+}
+.kpi-icon.icon-income {
+    background-color: var(--bs-warning-bg-subtle);
+    color: var(--bs-warning-text-emphasis);
+}
+.kpi-icon.icon-units {
+    background-color: var(--bs-info-bg-subtle);
+    color: var(--bs-info-text-emphasis);
+}
+.kpi-icon.icon-refund {
+    background-color: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+}
+
+/* Контейнер для текстового содержимого */
+.kpi-content {
+    flex-grow: 1;
+    min-width: 0; /* Позволяет тексту сокращаться через "..." */
+}
+
+.kpi-label {
+    font-size: 0.875rem; /* Немного уменьшили для иерархии */
+    color: var(--mc-text-secondary);
+    margin-bottom: 0.1rem;
+}
+
+.kpi-value-single {
+    font-size: 2rem; /* Увеличили для акцента */
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--bs-body-color);
+}
+
+.kpi-plan {
+    font-size: 0.85rem;
+    color: var(--mc-text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* Стили для карточки с проданными юнитами */
+.kpi-unit-list {
+    font-size: 0.9rem;
+    width: 100%;
+}
+.kpi-unit-list div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.2rem 0;
+}
+
+/* Стили для карточки с рекордами */
+.kpi-record-list div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
+}
+
+.kpi-record-list strong {
+    margin-left: 0.5rem; /* Небольшой отступ для рекордов */
+}

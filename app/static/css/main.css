@@ -1,0 +1,111 @@
+/* :::::: ПЕРЕМЕННЫЕ И ОСНОВНАЯ СТИЛИСТИКА (СТИЛЬ MACRO CRM) :::::: */
+:root {
+    /* Цветовая палитра */
+    --mc-primary-blue: #0d6efd; /* Основной синий цвет для акцентов */
+    --mc-primary-blue-rgb: 13, 110, 253;
+    --mc-bg-gray: #f8f9fa;      /* Фон страницы */
+    --mc-element-bg: #ffffff;   /* Фон для карточек, полей ввода */
+    --mc-border-color: #dee2e6;  /* Цвет границ */
+    --mc-text-primary: #212529; /* Основной цвет текста */
+    --mc-text-secondary: #6c757d;/* Второстепенный цвет текста */
+
+    /* Типографика и скругления */
+    --mc-font-family: 'Poppins', 'Montserrat', sans-serif;
+    --mc-border-radius: 0.5rem; /* 8px */
+    --mc-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* :::::: ГЛОБАЛЬНЫЕ СТИЛИ :::::: */
+body {
+    font-family: var(--mc-font-family);
+    background-color: var(--mc-bg-gray);
+    color: var(--mc-text-primary);
+}
+
+/* Убираем старый фон с точками/частицами */
+#particles-js, body::before {
+    display: none;
+}
+
+/* :::::: КОМПОНЕНТЫ :::::: */
+
+/* 1. Хедер (Шапка сайта) */
+.header {
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--mc-border-color);
+    box-shadow: none; /* Убираем тень, оставляем только границу */
+}
+
+.navbar-brand {
+    color: var(--mc-text-primary) !important;
+}
+
+.nav-link {
+    font-weight: 500;
+    color: var(--mc-text-secondary);
+    transition: color 0.2s ease, background-color 0.2s ease;
+    border-radius: var(--mc-border-radius);
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.1rem;
+}
+.nav-link.active, .nav-link:hover {
+    color: var(--mc-primary-blue) !important;
+    background-color: rgba(var(--mc-primary-blue-rgb), 0.1);
+}
+
+/* 2. Кнопки */
+.btn {
+    font-weight: 500;
+    border-radius: var(--mc-border-radius);
+    border: none; /* Убираем рамки у стандартных кнопок */
+    transition: all 0.2s ease-in-out;
+}
+.btn-primary {
+    background-color: var(--mc-primary-blue);
+    color: #fff;
+}
+.btn-primary:hover {
+    background-color: #0b5ed7; /* Более темный синий при наведении */
+    color: #fff;
+}
+.btn:focus, .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--mc-primary-blue-rgb), 0.3);
+}
+
+/* 3. Карточки */
+.card {
+    background-color: var(--mc-element-bg);
+    border: 1px solid var(--mc-border-color);
+    box-shadow: var(--mc-card-shadow);
+    border-radius: var(--mc-border-radius);
+}
+
+/* 4. Поля ввода и формы */
+.form-label {
+    font-weight: 500;
+    color: var(--mc-text-secondary);
+}
+.form-control, .form-select {
+    background-color: var(--mc-element-bg);
+    color: var(--mc-text-primary);
+    border: 1px solid var(--mc-border-color);
+    border-radius: var(--mc-border-radius);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.form-control:focus, .form-select:focus {
+    border-color: var(--mc-primary-blue);
+    box-shadow: 0 0 0 3px rgba(var(--mc-primary-blue-rgb), 0.3);
+    background-color: var(--mc-element-bg);
+    color: var(--mc-text-primary);
+}
+.invalid-feedback {
+    font-weight: 500;
+}
+/* Стиль для отметок с дополнительными скидками */
+.badge-additional-discount {
+    background-color: rgba(var(--mc-primary-blue-rgb), 0.2); /* Светлый оттенок синего */
+    color: var(--mc-primary-blue); /* Основной синий цвет текста */
+    border: 1px solid rgba(var(--mc-primary-blue-rgb), 0.5); /* Тонкая синяя граница */
+}

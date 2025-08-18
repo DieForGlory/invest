@@ -1,0 +1,202 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/report_style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/manager_performance_style.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <a href="{{ url_for('report.manager_performance_report') }}" class="text-muted text-decoration-none small mb-1 d-block"><i class="bi bi-arrow-left"></i> {{ _('Ко всем менеджерам') }}</a>
+        <h1 class="mb-0">{{ data.manager_name }}</h1>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <div class="form-check form-switch fs-5">
+            <input class="form-check-input" type="checkbox" role="switch" id="currency-switcher">
+            <label class="form-check-label" for="currency-switcher">USD</label>
+        </div>
+        <form method="GET" class="d-flex align-items-center gap-2 mb-0">
+            <select name="year" id="year-select" class="form-select w-auto" onchange="this.form.submit()">
+                {% for y in years_for_nav %}
+                <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+<div class="kpi-grid mb-4">
+    <div class="kpi-card">
+        <div class="kpi-icon bg-purple">
+            <i class="bi bi-building-heart"></i>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-label">{{ _('Любимый ЖК') }}</div>
+            <div class="kpi-value text-truncate" title="{{ kpi_data.best_complex.name or '–' }}">{{ kpi_data.best_complex.name or '–' }}</div>
+            {% if kpi_data.best_complex.count > 0 %}
+                <div class="kpi-secondary">{{ kpi_data.best_complex.count }} {{ _('сделок') }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-icon bg-teal">
+            <i class="bi bi-calendar2-check"></i>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-label">{{ _('Лучший месяц') }} ({{ selected_year }})</div>
+            <div class="kpi-value money-value" data-uzs-value="{{ kpi_data.best_month_in_year.income.total }}">{{ "{:,.0f}".format(kpi_data.best_month_in_year.income.total | default(0)) }}</div>
+            {% if kpi_data.best_month_in_year.income.month %}
+                <div class="kpi-secondary">{{ _(month_names.get(kpi_data.best_month_in_year.income.month, '')) }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-icon bg-orange">
+            <i class="bi bi-tags"></i>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-label">{{ _('Продано юнитов') }} ({{ selected_year }})</div>
+            <div class="kpi-units-list">
+                {% for type, count in kpi_data.units_by_type.items() %}
+                    <div class="unit-item">
+                        <span>{{ _(type) }}</span>
+                        <span class="badge">{{ count }}</span>
+                    </div>
+                {% else %}
+                    <span class="text-muted">–</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-icon bg-gold">
+            <i class="bi bi-trophy"></i>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-label">{{ _('Рекорды за все время') }}</div>
+            <div class="kpi-records-list">
+                <div class="record-item">
+                    <span>{{ _('Год:') }}</span>
+                    <span class="record-value money-value" data-uzs-value="{{ kpi_data.all_time_records.best_year_income.total }}">{{ "{:,.0f}".format(kpi_data.all_time_records.best_year_income.total | default(0)) }}</span>
+                </div>
+                <div class="record-item">
+                    <span>{{ _('Месяц:') }}</span>
+                    <span class="record-value money-value" data-uzs-value="{{ kpi_data.all_time_records.best_month_income.total }}">{{ "{:,.0f}".format(kpi_data.all_time_records.best_month_income.total | default(0)) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="pills-tab" role="tablist">
+  <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#pills-table">{{ _('Поступления (Таблица)') }}</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pills-chart-income">{{ _('Поступления (График)') }}</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pills-ranking">{{ _('Рейтинг ЖК') }}</button></li>
+</ul>
+
+<div class="tab-content" id="pills-tabContent">
+  <div class="tab-pane fade show active" id="pills-table">
+    <div class="card">
+        <div class="card-body p-0"><div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th rowspan="2" class="align-middle text-center">{{ _('Месяц') }}</th>
+                        <th colspan="3" class="text-center">{{ _('Поступления') }}</th>
+                        <th rowspan="2" class="align-middle text-center">{{ _('Выплата по KPI') }}</th>
+                    </tr>
+                    <tr>
+                        <th class="text-end">{{ _('План') }}, <span class="table-currency-label">UZS</span></th>
+                        <th class="text-end">{{ _('Факт') }}, <span class="table-currency-label">UZS</span></th>
+                        <th class="text-center">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for month_data in data.performance %}
+                    <tr>
+                        <td class="text-center"><strong>{{ _(month_names.get(month_data.month, '')) }}</strong></td>
+                        <td class="text-end money-value" data-uzs-value="{{ month_data.plan_income }}">{{ "{:,.0f}".format(month_data.plan_income) }}</td>
+                        <td class="text-end fw-bold money-value" data-uzs-value="{{ month_data.fact_income }}">{{ "{:,.0f}".format(month_data.fact_income) }}</td>
+                        <td class="text-center">
+                          {% set p_inc = month_data.income_percent %}
+                          <span class="badge w-75 p-{{ 'success' if p_inc >= 95 else 'warning' if p_inc >= 75 else 'danger' }}">{{ "%.1f"|format(p_inc) }}%</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center align-items-center gap-2">
+                                <span id="kpi-result-{{ month_data.month }}" class="kpi-result fw-bold text-primary" style="min-width: 100px; text-align: right;"></span>
+                                <button class="btn btn-sm btn-outline-primary calculate-kpi-btn" data-manager-id="{{ manager_id }}" data-year="{{ selected_year }}" data-month="{{ month_data.month }}" title="{{ _('Рассчитать KPI') }}"><i class="bi bi-calculator"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+  </div>
+  <div class="tab-pane fade" id="pills-chart-income">
+    <div class="card"><div class="card-body"><h5 class="card-title">{{ _('План/Факт по поступлениям') }}, <span class="chart-currency-label">UZS</span></h5><div class="dashboard-chart-container"><canvas id="performanceChartIncome"></canvas></div></div></div>
+  </div>
+  <div class="tab-pane fade" id="pills-ranking" role="tabpanel" aria-labelledby="pills-ranking-tab">
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 5%;">№</th>
+                            <th>{{ _('Название ЖК') }}</th>
+                            <th class="text-center">{{ _('Кол-во сделок') }}</th>
+                            <th class="text-end">{{ _('Сумма поступлений') }}, <span class="table-currency-label">UZS</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in complex_ranking %}
+                        <tr>
+                            <td class="text-center">{{ loop.index }}</td>
+                            <td><strong>{{ item.name }}</strong></td>
+                            <td class="text-center">{{ item.deal_count }}</td>
+                            <td class="text-end money-value" data-uzs-value="{{ item.total_income }}">{{ "{:,.0f}".format(item.total_income) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted p-4">
+                                {{ _('Нет данных для построения рейтинга.') }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Передаем все необходимые данные, включая переводы, в JS
+        window.pageData = {
+            performance: {{ data.performance | tojson | safe }},
+            usdRate: {{ usd_to_uzs_rate or 1 }},
+            monthNames: {{ month_names | tojson | safe }},
+            i18n: {
+                error: "{{ _('Ошибка') }}",
+                networkError: "{{ _('Ошибка сети') }}",
+                loading: "{{ _('Загрузка...') }}",
+                plan: "{{ _('План') }}",
+                fact: "{{ _('Факт') }}"
+            }
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/manager_performance_logic.js') }}" defer></script>
+{% endblock %}

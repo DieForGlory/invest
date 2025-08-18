@@ -1,2 +1,3 @@
 /app/uploads/discount_template.xlsx
 /instance/*
+*.db-*
