@@ -58,7 +58,7 @@ def _optimize_and_save_image(image_file_storage):
 
 def add_special_offer(sell_id, usp_text, extra_discount, image_file):
     """Добавляет новое специальное предложение."""
-    if MonthlySpecial.query.filter_by(sell_id=sell_id).first():
+    if g.company_db_session.query(MonthlySpecial).filter_by(sell_id=sell_id).first():
         raise ValueError(f"Специальное предложение для квартиры с ID {sell_id} уже существует.")
 
     # Оптимизируем и сохраняем изображение
@@ -81,7 +81,7 @@ def get_active_special_offers():
     today = date.today()
 
     # --- Получаем все стандартные скидки для 100% оплаты ---
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return []  # Если нет системы скидок, нет и расчета
 
@@ -92,7 +92,7 @@ def get_active_special_offers():
     }
 
     # --- Шаг 1: Получаем все активные спецпредложения из 'planning.db' ---
-    active_specials = MonthlySpecial.query.filter(
+    active_specials = g.company_db_session.query(planning_models.DiscountVersion).filter_by(
         MonthlySpecial.is_active == True,
         MonthlySpecial.expires_at >= today
     ).order_by(MonthlySpecial.created_at.desc()).all()
@@ -156,7 +156,7 @@ def get_active_special_offers():
 def get_special_offer_details_by_sell_id(sell_id: int):
     """Находит спец. предложение по ID КВАРТИРЫ (sell_id)."""
     # Эта функция ищет по sell_id, как и было нужно для публичной страницы
-    special = MonthlySpecial.query.filter_by(sell_id=sell_id).first()
+    special = g.company_db_session.query(MonthlySpecial).filter_by(sell_id=sell_id).first()
     if not special:
         return None
 
@@ -175,7 +175,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     sell_id = special.sell_id
 
     # --- Получаем стандартные скидки ---
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return None
 
