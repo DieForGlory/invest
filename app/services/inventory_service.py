@@ -15,13 +15,9 @@ from app.models.exclusion_models import ExcludedComplex
 
 def get_inventory_summary_data():
     """
-    Собирает данные по остаткам и возвращает детализацию и общую сводку,
-    учитывая исключенные ЖК.
+    Собирает данные по остаткам и возвращает детализацию и общую сводку. (ИСПРАВЛЕННАЯ ВЕРСИЯ)
     """
-    # 1. Получаем список исключенных ЖК
     excluded_complex_names = {c.complex_name for c in g.company_db_session.query(ExcludedComplex).all()}
-
-    # 2. Получаем активную версию скидок (теперь из planning_models)
     active_version = g.company_db_session.query(DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return {}, {}
@@ -29,12 +25,12 @@ def get_inventory_summary_data():
     discounts_map = {
         (d.complex_name, d.property_type): d
         for d in active_version.discounts
-        if d.payment_method == PaymentMethod.FULL_PAYMENT # Используем Enum из planning_models
+        if d.payment_method == PaymentMethod.FULL_PAYMENT
     }
 
-    # 3. Запрос к базе данных (без изменений, так как модели из main_db)
-    valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"] # <-- Добавлен статус 'Бронь'
-    unsold_sells_query = g.company_db_session.query(EstateSell).options(
+    valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
+    # ИСПРАВЛЕНИЕ: Запрос к g.mysql_db_session
+    unsold_sells_query = g.mysql_db_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_sell_status_name.in_(valid_statuses),
@@ -49,7 +45,6 @@ def get_inventory_summary_data():
 
     unsold_sells = unsold_sells_query.all()
 
-    # 4. Агрегируем данные
     summary_by_complex = defaultdict(lambda: defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0
     }))
@@ -58,51 +53,43 @@ def get_inventory_summary_data():
         if not sell.house:
             continue
         try:
-            # Используем Enum из planning_models
-            prop_type_enum = PropertyType(sell.estate_sell_category)
+            # ИСПРАВЛЕНИЕ: Правильное сопоставление Enum по системному имени из БД
+            prop_type_enum = PropertyType[sell.estate_sell_category]
             complex_name = sell.house.complex_name
-        except ValueError:
+        except KeyError:
             continue
 
         discount = discounts_map.get((complex_name, prop_type_enum))
         bottom_price = 0
         if sell.estate_price and discount:
-            # Используем Enum из planning_models
             deduction = 3_000_000 if prop_type_enum == PropertyType.FLAT else 0
             price_for_calc = sell.estate_price - deduction
             if price_for_calc > 0:
-                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) # <-- 'action' заменено на 'kd'
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
                 bottom_price = price_for_calc * (1 - total_discount_rate)
 
-        metrics = summary_by_complex[complex_name][sell.estate_sell_category]
+        # Используем русское название '.value' для отображения в отчете
+        metrics = summary_by_complex[complex_name][prop_type_enum.value]
         metrics['units'] += 1
         metrics['total_area'] += sell.estate_area
         metrics['total_value'] += bottom_price
 
-    # 5. Считаем общую сводку
     overall_summary = defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0
     })
-
     for prop_types_data in summary_by_complex.values():
         for prop_type, metrics in prop_types_data.items():
             overall_summary[prop_type]['units'] += metrics['units']
             overall_summary[prop_type]['total_area'] += metrics['total_area']
             overall_summary[prop_type]['total_value'] += metrics['total_value']
 
-    # 6. Считаем средние цены
-    for complex_name, prop_types_data in summary_by_complex.items():
-        for prop_type, metrics in prop_types_data.items():
-            if metrics['total_area'] > 0:
-                metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area']
-            else:
-                metrics['avg_price_m2'] = 0
+    for metrics in summary_by_complex.values():
+        for prop_metrics in metrics.values():
+            prop_metrics['avg_price_m2'] = prop_metrics['total_value'] / prop_metrics['total_area'] if prop_metrics[
+                                                                                                           'total_area'] > 0 else 0
 
-    for prop_type, metrics in overall_summary.items():
-        if metrics['total_area'] > 0:
-            metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area']
-        else:
-            metrics['avg_price_m2'] = 0
+    for metrics in overall_summary.values():
+        metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area'] if metrics['total_area'] > 0 else 0
 
     return summary_by_complex, overall_summary
 

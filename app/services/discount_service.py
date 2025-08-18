@@ -188,7 +188,8 @@ def get_discounts_with_summary():
         total_discount_rate = sum(getattr(base_discount_100, f, 0) or 0 for f in ['mpp', 'rop', 'kd', 'action']) if base_discount_100 else 0
         remainder_prices_per_sqm = []
         for sell in sells_by_complex.get(complex_name, []):
-            if sell.estate_sell_status_name in valid_statuses and sell.estate_sell_category == planning_models.PropertyType.FLAT.value and sell.estate_price and sell.estate_area:
+            # ИСПРАВЛЕНИЕ: Сравниваем с .name ('FLAT'), а не .value ('Квартира')
+            if sell.estate_sell_status_name in valid_statuses and sell.estate_sell_category == planning_models.PropertyType.FLAT.name and sell.estate_price and sell.estate_area:
                 price_after_deduction = sell.estate_price - 3_000_000
                 if price_after_deduction > 0:
                     final_price = price_after_deduction * (1 - total_discount_rate)

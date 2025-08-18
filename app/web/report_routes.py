@@ -1,11 +1,11 @@
 # app/web/report_routes.py
-import json
+
 import os
 from datetime import date, timedelta
 # --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
 from datetime import datetime  # Добавлен timedelta
 from ..core.extensions import db
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file, json
 from flask import jsonify
 from flask_login import login_required
 from sqlalchemy import or_, extract, func
@@ -147,25 +147,26 @@ def plan_fact_report():
     year = request.args.get('year', today.year, type=int)
     period = request.args.get('period', 'monthly')
     month = request.args.get('month', today.month, type=int)
+
+    # --- ИСПРАВЛЕННАЯ ЛОГИКА ---
+    # Просто берем русское значение из фильтра, как оно есть.
+    # Это значение соответствует тому, что хранится в обеих базах (плановой и фактической).
     prop_type = request.args.get('property_type', planning_models.PropertyType.FLAT.value)
+
     usd_rate = currency_service.get_current_effective_rate()
 
     is_period_view = period != 'monthly'
-    total_refunds = 0 # Инициализируем
+    total_refunds = 0
 
     if is_period_view:
-        # Примечание: для периодов логика возвратов может потребовать доработки,
-        # пока мы просто суммируем их.
         report_data, totals = report_service.generate_consolidated_report_by_period(year, period, prop_type)
         summary_data = []
         grand_totals = {}
-        # Суммируем возвраты за весь период
         for m in report_service.PERIOD_MONTHS.get(period, []):
-             total_refunds += report_service.get_refund_data(year, m, prop_type)
-
+            total_refunds += report_service.get_refund_data(year, m, prop_type)
     else:
         summary_data = report_service.get_monthly_summary_by_property_type(year, month)
-        # --- ИЗМЕНЕНИЕ: Получаем третье значение - возвраты ---
+        # Передаем правильное значение 'prop_type' в сервис
         report_data, totals, total_refunds = report_service.generate_plan_fact_report(year, month, prop_type)
         grand_totals = report_service.calculate_grand_totals(year, month)
 
@@ -175,7 +176,6 @@ def plan_fact_report():
                            summary_data=summary_data,
                            totals=totals,
                            grand_totals=grand_totals,
-                           # --- НОВОЕ: Передаем возвраты в шаблон ---
                            total_refunds=total_refunds,
                            years=[today.year - 1, today.year, today.year + 1],
                            months=range(1, 13),

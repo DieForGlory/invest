@@ -12,6 +12,15 @@ class PropertyType(enum.Enum):
     GARAGE = 'Парковка'
     STORAGEROOM = 'Кладовое помещение'
 
+    @classmethod
+    def from_value(cls, value):
+        """Находит член Enum по его значению (например, по русскому названию)."""
+        for member in cls:
+            if member.value == value:
+                return member
+        # Возвращаем FLAT по умолчанию, если ничего не найдено
+        return cls.FLAT
+
 
 class PaymentMethod(enum.Enum):
     FULL_PAYMENT = '100% оплата'

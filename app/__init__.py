@@ -9,7 +9,7 @@ from flask_migrate import Migrate
 from flask_babel import Babel
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine  # <-- ДОБАВЛЕН ИМПОРТ
-
+from decimal import Decimal
 from .core.config import DevelopmentConfig
 from .core.extensions import db
 
@@ -27,6 +27,10 @@ class CustomJSONEncoder(json.JSONEncoder):
         try:
             if isinstance(obj, (date, datetime)):
                 return obj.isoformat()
+            # --- НАЧАЛО ИЗМЕНЕНИЯ ---
+            if isinstance(obj, Decimal):
+                return float(obj)  # Преобразуем Decimal в float
+            # --- КОНЕЦ ИЗМЕНЕНИЯ ---
             iterable = iter(obj)
         except TypeError:
             pass
@@ -119,6 +123,7 @@ def create_app(config_class=DevelopmentConfig):
                 mysql_engine = create_engine(
                     company.mysql_db_uri,
                     echo=True,  # Включаем полное логирование SQL
+                    connect_args={"init_command": "SET NAMES utf8mb4"},
                     isolation_level="READ COMMITTED"  # Заставляем читать актуальные данные
                 )
                 g.mysql_db_session = sessionmaker(bind=mysql_engine)()
