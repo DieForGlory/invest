@@ -1,0 +1,78 @@
+{% extends "layouts/base.html" %}
+{% from "layouts/_form_helpers.html" import render_field %}
+
+{% block content %}
+<h1 class="mb-4">Super Admin Dashboard</h1>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card card-glass h-100">
+            <div class="card-header">
+                <h5><i class="bi bi-buildings-fill me-2"></i>Список компаний</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Поддомен</th>
+                                <th>Администраторы</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for company in companies %}
+                            <tr>
+                                <td>{{ company.id }}</td>
+                                <td><strong>{{ company.name }}</strong></td>
+                                <td><span class="badge bg-secondary">{{ company.subdomain }}</span></td>
+                                <td>
+                                    {% for user in company.users %}
+                                        {% if user.role.name == 'ADMIN' %}
+                                            <div>{{ user.username }}</div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('super_admin.create_company_admin', company_id=company.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-person-plus-fill"></i> Добавить админа
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Компаний пока нет.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card card-glass">
+             <div class="card-header">
+                <h5><i class="bi bi-plus-circle-fill me-2"></i>Создать новую компанию</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    {{ render_field(form.name) }}
+                    {{ render_field(form.subdomain) }}
+                    <hr>
+                    <h6 class="text-muted">Данные для подключения к MySQL</h6>
+                    {{ render_field(form.db_host) }}
+                    {{ render_field(form.db_name) }}
+                    {{ render_field(form.db_user) }}
+                    {{ render_field(form.db_password) }}
+                    {{ form.submit(class="btn btn-warning w-100 mt-3") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

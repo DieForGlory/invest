@@ -1,0 +1,29 @@
+{% extends "layouts/base.html" %}
+{% from "layouts/_form_helpers.html" import render_field %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card card-glass">
+            <div class="card-header">
+                <a href="{{ url_for('super_admin.dashboard') }}" class="btn btn-outline-secondary float-end">
+                    <i class="bi bi-arrow-left"></i> Назад
+                </a>
+                <h5 class="mb-0">Создать администратора для<br><strong class="text-primary">{{ company.name }}</strong></h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    {{ render_field(form.username) }}
+                    {{ render_field(form.full_name) }}
+                    {{ render_field(form.email) }}
+                    {{ render_field(form.phone_number) }}
+                    {{ render_field(form.password) }}
+                    {{ render_field(form.confirm_password) }}
+                    {{ form.submit(class="btn btn-warning w-100 mt-3") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

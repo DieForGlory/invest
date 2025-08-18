@@ -13,7 +13,7 @@ def get_calculator_settings():
     Использует паттерн "Синглтон", всегда работая с записью id=1.
     """
     # Используем planning_models.CalculatorSettings
-    settings = planning_models.CalculatorSettings.query.get(1)
+    settings = g.company_db_session.query(planning_models.CalculatorSettings).get(1)
     if not settings:
         settings = planning_models.CalculatorSettings(id=1)
         g.company_db_session.add(settings)
@@ -23,7 +23,7 @@ def get_calculator_settings():
 
 def get_all_excluded_complexes():
     """Возвращает список всех исключенных ЖК."""
-    return ExcludedComplex.query.order_by(ExcludedComplex.complex_name).all()
+    return g.company_db_session.query(ExcludedComplex).order_by(ExcludedComplex.complex_name).all()
 
 
 def toggle_complex_exclusion(complex_name: str):
@@ -31,7 +31,7 @@ def toggle_complex_exclusion(complex_name: str):
     Добавляет ЖК в список исключений, если его там нет,
     или удаляет, если он там уже есть.
     """
-    existing = ExcludedComplex.query.filter_by(complex_name=complex_name).first()
+    existing = g.company_db_session.query(ExcludedComplex).filter_by(complex_name=complex_name).first()
     if existing:
         g.company_db_session.delete(existing)
         message = f"Проект '{complex_name}' был удален из списка исключений."

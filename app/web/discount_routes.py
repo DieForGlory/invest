@@ -157,7 +157,7 @@ def edit_version(version_id):
 @login_required
 @permission_required('manage_discounts')
 def create_draft_version():
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         flash('Не найдена активная версия для создания черновика.', 'danger')
         return redirect(url_for('discount.versions_index'))

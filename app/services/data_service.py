@@ -15,7 +15,10 @@ def get_sells_with_house_info(page, per_page):
     try:
         # Запрос теперь проще. Мы получаем объекты EstateSell, связанные с EstateHouse.
         # Вместо .all() используем .paginate()
-        pagination = g.company_db_session.query(EstateSell).join(EstateHouse).order_by(EstateSell.id.desc()).paginate(
+        query = g.company_db_session.query(EstateSell).join(EstateHouse).order_by(EstateSell.id.desc())
+        # Затем передаем его в функцию db.paginate
+        pagination = db.paginate(
+            query,
             page=page,
             per_page=per_page,
             error_out=False

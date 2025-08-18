@@ -107,7 +107,7 @@ def create_app(config_class=DevelopmentConfig):
 
         # Создаем движок и сессию для базы данных этой компании
         try:
-            engine = db.create_engine(company.db_uri, {})
+            engine = db.create_engine(company.db_uri)
             # Сохраняем сессию в глобальном объекте `g` на время запроса
             g.company_db_session = sessionmaker(bind=engine)()
         except Exception as e:
