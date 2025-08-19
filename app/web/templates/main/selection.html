@@ -30,8 +30,8 @@
                 <div class="col-md-2">
                     <label for="currency" class="form-label">{{ _('Валюта') }}</label>
                     <select class="form-select form-select-lg" id="currency" name="currency">
-                        <option value="USD" {% if request.form.currency == 'USD' %}selected{% endif %}>USD ($)</option>
-                        <option value="UZS" {% if request.form.currency == 'UZS' %}selected{% endif %}>UZS</option>
+                        <option value="USD" {% if request.form.currency == 'USD' or (not request.form.currency and default_currency == 'USD') %}selected{% endif %}>USD ($)</option>
+                        <option value="UZS" {% if request.form.currency == 'UZS' or (not request.form.currency and default_currency == 'UZS') %}selected{% endif %}>UZS</option>
                     </select>
                 </div>
                 <div class="col-md-4">

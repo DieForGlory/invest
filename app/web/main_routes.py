@@ -20,7 +20,7 @@ from ..services import settings_service
 from ..services.data_service import get_sells_with_house_info, get_filter_options
 from ..services.discount_service import get_current_usd_rate
 from ..services.selection_service import find_apartments_by_budget, get_apartment_card_data
-
+from ..services import currency_service
 main_bp = Blueprint('main', __name__, template_folder='templates')
 
 @main_bp.route('/language/<lang>')
@@ -98,7 +98,8 @@ def selection():
         # Экранируем '%' для gettext
         {'value': pm.value, 'display': _(pm.value.replace('%', '%%'))} for pm in PaymentMethod
     ]
-
+    currency_settings = currency_service._get_settings()
+    default_currency = currency_settings.default_currency
     if request.method == 'POST':
         try:
             budget = float(request.form.get('budget'))
@@ -120,12 +121,11 @@ def selection():
             flash("Пожалуйста, введите корректную сумму бюджета.", "danger")
 
     return render_template('main/selection.html',
-                           title=_("Подбор по бюджету"),  # <-- Тоже переводим заголовок
+                           title=_("Подбор по бюджету"),
                            results=results,
-                           # --- НАЧАЛО ИЗМЕНЕНИЙ: Передаем новые списки в шаблон ---
                            property_types=translated_property_types,
                            payment_methods=translated_payment_methods,
-                           # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+                           default_currency=default_currency,
                            filter_options=filter_options)
 
 

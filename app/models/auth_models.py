@@ -99,7 +99,6 @@ class SalesManager(db.Model):
     # is_fired = db.Column(db.Boolean, default=False)
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
 
-    company = db.relationship('Company')
 
     @property
     def full_name(self):

@@ -17,6 +17,7 @@ def _get_settings():
         g.company_db_session.add(settings)
         # Установим начальные значения при первом создании
         settings.manual_rate = 12500.0
+        settings.default_currency = 'UZS'
         settings.update_effective_rate()
         g.company_db_session.commit()
     return settings
@@ -86,3 +87,18 @@ def get_current_effective_rate():
     """ЕДИНАЯ функция для получения актуального курса для всех расчетов."""
     settings = _get_settings()
     return settings.effective_rate
+
+
+def set_default_currency(currency: str):
+    """Устанавливает валюту по умолчанию для компании."""
+    if currency not in ['UZS', 'USD']:
+        raise ValueError("Currency must be 'UZS' or 'USD'")
+
+    settings = _get_settings()
+    settings.default_currency = currency
+    g.company_db_session.commit()
+
+
+# --- КОНЕЦ НОВОГО КОДА ---
+
+

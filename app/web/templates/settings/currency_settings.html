@@ -56,6 +56,22 @@
                 </form>
             </div>
         </div>
-    </div>
+
+        <div class="card card-glass mt-4">
+            <div class="card-header"><h5 class="mb-0">{{ _('3. Валюта по умолчанию') }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="default_currency" class="form-label">{{ _('Выберите валюту для отображения по умолчанию в системе') }}</label>
+                        <select name="default_currency" id="default_currency" class="form-select">
+                            <option value="UZS" {% if settings.default_currency == 'UZS' %}selected{% endif %}>UZS (Сум)</option>
+                            <option value="USD" {% if settings.default_currency == 'USD' %}selected{% endif %}>USD (Доллар США)</option>
+                        </select>
+                    </div>
+                    <button type="submit" name="set_default_currency" class="btn btn-info">{{ _('Сохранить валюту') }}</button>
+                </form>
+            </div>
+        </div>
+        </div>
 </div>
 {% endblock %}

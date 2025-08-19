@@ -277,7 +277,15 @@ def currency_settings():
                 flash(f"Ручной курс успешно установлен: {rate}.", "success")
             except (ValueError, TypeError):
                 flash("Неверное значение для ручного курса.", "danger")
+        if 'set_default_currency' in request.form:
+            currency = request.form.get('default_currency')
+            try:
+                currency_service.set_default_currency(currency)
+                flash(f"Валюта по умолчанию изменена на {currency}.", "success")
+            except ValueError as e:
+                flash(str(e), "danger")
         return redirect(url_for('report.currency_settings'))
+
     settings = currency_service._get_settings()
     return render_template('settings/currency_settings.html', settings=settings, title="Настройки курса валют")
 

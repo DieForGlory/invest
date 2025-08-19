@@ -24,6 +24,8 @@ class CurrencySettings(db.Model):
     manual_rate = db.Column(db.Float, default=0.0)
     effective_rate = db.Column(db.Float, default=0.0)
     cbu_last_updated = db.Column(db.DateTime)
+    # --- ДОБАВЛЕННАЯ СТРОКА ---
+    default_currency = db.Column(db.String(3), default='UZS', nullable=False)
 
     def update_effective_rate(self):
         if self.rate_source == 'cbu':

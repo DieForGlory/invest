@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required
 from ..core.extensions import db
 from ..core.decorators import permission_required
-
+from flask import g
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модуль planning_models вместо классов из discount_models
 from ..models import planning_models
@@ -102,7 +102,8 @@ def upload_discounts():
 @permission_required('view_version_history')
 def versions_index():
     # Обращаемся к моделям через planning_models
-    versions = planning_models.DiscountVersion.query.order_by(planning_models.DiscountVersion.version_number.desc()).all()
+    versions = g.company_db_session.query(planning_models.DiscountVersion).order_by(
+        planning_models.DiscountVersion.version_number.desc()).all()
     active_version_obj = next((v for v in versions if v.is_active), None)
     return render_template(
         'discounts/versions.html',
