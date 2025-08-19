@@ -16,9 +16,9 @@ from app.models import auth_models
 from app.models import planning_models
 from app.models.estate_models import EstateDeal, EstateSell, EstateHouse
 from app.models.finance_models import FinanceOperation
-from app.models.auth_models import User
 from ..models import planning_models
 from . import currency_service
+
 
 @require_mysql_db
 def process_manager_plans_from_excel(file_path: str):
@@ -30,7 +30,8 @@ def process_manager_plans_from_excel(file_path: str):
     # В регулярном выражении оставляем только "поступления"
     header_pattern = re.compile(r"(поступления) (\d{2}\.\d{2}\.\d{4})", re.IGNORECASE)
 
-    managers_map = {m.full_name: m.id for m in g.mysql_db_session.query(User).filter(User.role_name == 'manager', User.is_active == True).all()}
+    # ИСПРАВЛЕНО: Используем auth_models.SalesManager для поиска менеджеров в таблице 'users'
+    managers_map = {m.users_name: m.id for m in g.mysql_db_session.query(auth_models.SalesManager).filter.all()}
 
     for index, row in df.iterrows():
         manager_name = row.iloc[0]
@@ -57,6 +58,7 @@ def process_manager_plans_from_excel(file_path: str):
 
     updated_count, created_count = 0, 0
     for (manager_id, year, month), values in plans_to_save.items():
+        # ИСПРАВЛЕНО: Используем g.company_db_session для записи в локальную базу
         plan_entry = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(
             manager_id=manager_id, year=year, month=month
         ).first()
@@ -64,11 +66,12 @@ def process_manager_plans_from_excel(file_path: str):
             plan_entry = planning_models.ManagerSalesPlan(manager_id=manager_id, year=year, month=month)
             g.company_db_session.add(plan_entry)
             created_count += 1
+        else:
+            updated_count += 1
 
         # Устанавливаем plan_volume в 0, обновляем только plan_income
         plan_entry.plan_volume = 0.0
         plan_entry.plan_income = values.get('plan_income', 0.0)
-        updated_count += 1
 
     g.company_db_session.commit()
     return f"Успешно обработано планов: создано {created_count}, обновлено {updated_count}."
@@ -80,16 +83,16 @@ def get_manager_performance_details(manager_id: int, year: int):
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
     ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
     """
-    manager = g.mysql_db_session.query(User).filter(
-        User.id == manager_id,
-        User.is_active == True,
-        User.company_id == g.current_company_id,
-        User.role_name == 'manager'
+    # ИСПРАВЛЕНО: Используем auth_models.SalesManager для поиска менеджера
+    manager = g.mysql_db_session.query(auth_models.SalesManager).filter(
+        auth_models.SalesManager.id == manager_id
     ).first()
     if not manager:
         return None
 
-    plans_query = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(manager_id=manager_id, year=year).all()
+    # ИСПРАВЛЕНО: Используем g.company_db_session для чтения планов
+    plans_query = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(manager_id=manager_id,
+                                                                                         year=year).all()
     plan_data = {p.month: p for p in plans_query}
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
@@ -124,7 +127,6 @@ def get_manager_performance_details(manager_id: int, year: int):
         fact_income = fact_income_data.get(month_num, 0)
         plan_income = plan.plan_income if plan else 0.0
 
-        # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: РАССЧИТЫВАЕМ KPI ПРЯМО ЗДЕСЬ ---
         kpi_bonus = calculate_manager_kpi(plan_income, fact_income)
 
         report.append({
@@ -135,10 +137,10 @@ def get_manager_performance_details(manager_id: int, year: int):
             'plan_income': plan_income,
             'fact_income': fact_income,
             'income_percent': (fact_income / plan_income * 100) if (plan and plan_income > 0) else 0,
-            'kpi_bonus': kpi_bonus  # <-- И ДОБАВЛЯЕМ РЕЗУЛЬТАТ В ДАННЫЕ
+            'kpi_bonus': kpi_bonus
         })
-
-    return {'manager_id': manager_id, 'manager_name': manager.full_name, 'performance': report}
+    # ИСПРАВЛЕНО: Обращаемся к правильному полю users_name
+    return {'manager_id': manager_id, 'manager_name': manager.users_name, 'performance': report}
 
 
 @require_mysql_db
@@ -146,12 +148,9 @@ def generate_manager_plan_template_excel():
     """
     Генерирует Excel-файл с ФИО всех менеджеров и столбцами планов на текущий год.
     """
-    managers = g.mysql_db_session.query(User).filter(
-        User.is_active == True,
-        User.company_id == g.current_company_id,
-        User.role_name == 'manager'
-    ).order_by(User.full_name).all()
-    manager_names = [manager.full_name for manager in managers]
+    # ИСПРАВЛЕНО: Используем auth_models.SalesManager для получения списка менеджеров
+    managers = g.mysql_db_session.query(auth_models.SalesManager).order_by(auth_models.SalesManager.users_name).all()
+    manager_names = [manager.users_name for manager in managers]
 
     current_year = date.today().year
     headers = ['ФИО']
@@ -177,7 +176,7 @@ def generate_manager_plan_template_excel():
 
 def calculate_manager_kpi(plan_income: float, fact_income: float) -> float:
     if not plan_income or plan_income == 0:
-        return 0.0  # Если плана не было, премии нет
+        return 0.0
 
     completion_percentage = (fact_income / plan_income) * 100
 
@@ -197,14 +196,12 @@ def calculate_manager_kpi(plan_income: float, fact_income: float) -> float:
 def generate_kpi_report_excel(year: int, month: int):
     """
     Создает детализированный и отформатированный отчет по KPI менеджеров в формате Excel.
-    (Исправленная версия с правильным порядком колонок и формулами)
     """
-    # 1. Получаем актуальный курс доллара
     usd_rate = currency_service.get_current_effective_rate()
     if not usd_rate or usd_rate == 0:
         raise ValueError("Не удалось получить актуальный курс USD.")
 
-    # 2. ШАГ А: Получаем все планы из базы `planning_db` за указанный период
+    # ИСПРАВЛЕНО: Используем g.company_db_session для чтения планов
     plans = g.company_db_session.query(planning_models.ManagerSalesPlan).filter(
         planning_models.ManagerSalesPlan.year == year,
         planning_models.ManagerSalesPlan.month == month,
@@ -212,20 +209,16 @@ def generate_kpi_report_excel(year: int, month: int):
     ).all()
 
     if not plans:
-        return None  # Если нет планов, возвращаем None
+        return None
 
     manager_ids_with_plans = [p.manager_id for p in plans]
     plans_map = {p.manager_id: p for p in plans}
 
-    # 3. ШАГ Б: Получаем из основной базы данных всех менеджеров, чьи ID мы нашли
-    managers = g.mysql_db_session.query(User).filter(
-        User.id.in_(manager_ids_with_plans),
-        User.is_active == True,
-        User.company_id == g.current_company_id,
-        User.role_name == 'manager'
-    ).order_by(User.full_name).all()
+    # ИСПРАВЛЕНО: Используем auth_models.SalesManager для получения ФИО и должности
+    managers = g.mysql_db_session.query(auth_models.SalesManager).filter(
+        auth_models.SalesManager.id.in_(manager_ids_with_plans)
+    ).order_by(auth_models.SalesManager.users_name).all()
 
-    # 4. Собираем исходные данные, объединяя результаты в Python
     source_data = []
     for manager in managers:
         plan = plans_map.get(manager.id)
@@ -248,40 +241,35 @@ def generate_kpi_report_excel(year: int, month: int):
         kpi_bonus_uzs = calculate_manager_kpi(plan.plan_income, fact_income)
 
         source_data.append({
-            "full_name": manager.full_name,
+            "full_name": manager.users_name,  # ИСПРАВЛЕНО
+            "position": manager.post_title or 'Менеджер по продажам',  # ИСПРАВЛЕНО
             "plan_uzs": plan.plan_income,
             "fact_uzs": fact_income,
             "kpi_bonus_uzs": kpi_bonus_uzs,
             "kpi_bonus_usd": kpi_bonus_uzs / usd_rate
         })
 
-    # 5. Формируем DataFrame в строгом соответствии с вашим ТЗ
     final_report_rows = []
     for i, data in enumerate(source_data):
         final_report_rows.append({
             '№': i + 1,
             'ФИО менеджера': data['full_name'],
-            'Должность': 'Менеджер по продажам',
+            'Должность': data['position'],
             'Личный план продаж на период (долл. США)': data['plan_uzs'] / usd_rate,
             'Факт выполнения личного плана продаж на период (долл. США)': data['fact_uzs'] / usd_rate,
             '% выполнения личного плана продаж': (data['fact_uzs'] / data['plan_uzs']) if data['plan_uzs'] > 0 else 0,
             'Удовлетворенность работой сотрудника (коэф.)': None,
-            'Итоговая сумма к выплате, NET (долл. США)': None,  # Placeholder
-            'Итоговая сумма к выплате, NET (сум)': None,  # Placeholder
-            'Итоговая сумма к выплате, GROSS (сум)': None  # Placeholder
+            'Итоговая сумма к выплате, NET (долл. США)': None,
+            'Итоговая сумма к выплате, NET (сум)': None,
+            'Итоговая сумма к выплате, GROSS (сум)': None
         })
 
     df = pd.DataFrame(final_report_rows)
-
-    # 6. Создаем и форматируем Excel-файл
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Ведомость KPI', index=False, startrow=1)
-
         workbook = writer.book
         worksheet = writer.sheets['Ведомость KPI']
-
-        # Форматы ячеек и заголовков
         header_format = workbook.add_format(
             {'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#D7E4BC', 'border': 1, 'align': 'center'})
         money_usd_format = workbook.add_format({'num_format': '$#,##0.00', 'border': 1})
@@ -289,15 +277,11 @@ def generate_kpi_report_excel(year: int, month: int):
         percent_format = workbook.add_format({'num_format': '0.0%', 'border': 1})
         coef_format = workbook.add_format({'bg_color': '#FFFFCC', 'border': 1})
         title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
-
         month_names = {1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
                        9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'}
         worksheet.merge_range('A1:J1', f'Ведомость по KPI за {month_names.get(month, "")} {year}', title_format)
-
         for col_num, value in enumerate(df.columns):
             worksheet.write(1, col_num, value, header_format)
-
-        # Ширина и формат колонок
         worksheet.set_column('A:A', 5)
         worksheet.set_column('B:B', 35)
         worksheet.set_column('C:C', 25)
@@ -307,17 +291,13 @@ def generate_kpi_report_excel(year: int, month: int):
         worksheet.set_column('H:H', 25, money_usd_format)
         worksheet.set_column('I:I', 25, money_uzs_format)
         worksheet.set_column('J:J', 25, money_uzs_format)
-
-        # 7. Вставляем формулы
         for idx, data in enumerate(source_data):
             row_num = idx + 3
             kpi_usd = data['kpi_bonus_usd']
             kpi_uzs = data['kpi_bonus_uzs']
-
             worksheet.write_formula(f'H{row_num}', f'=IF(ISBLANK(G{row_num}),0,{kpi_usd}*G{row_num})')
             worksheet.write_formula(f'I{row_num}', f'=IF(ISBLANK(G{row_num}),0,{kpi_uzs}*G{row_num})')
             worksheet.write_formula(f'J{row_num}', f'=IF(ISBLANK(I{row_num}),0,I{row_num}/0.88)')
-
     output.seek(0)
     return output
 
@@ -327,7 +307,6 @@ def get_manager_kpis(manager_id: int, year: int):
     """
     Рассчитывает расширенные KPI для одного менеджера на основе ПОСТУПЛЕНИЙ.
     """
-    # Запрос для "Любимого ЖК" остается по количеству сделок
     best_complex_query = g.mysql_db_session.query(
         EstateHouse.complex_name, func.count(EstateDeal.id).label('deal_count')
     ).join(EstateSell, EstateHouse.sells).join(EstateDeal, EstateSell.deals) \
@@ -336,7 +315,6 @@ def get_manager_kpis(manager_id: int, year: int):
         EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"])
     ).group_by(EstateHouse.complex_name).order_by(func.count(EstateDeal.id).desc()).first()
 
-    # Запрос для "Продано юнитов" остается по количеству сделок
     units_by_type_query = g.mysql_db_session.query(
         EstateSell.estate_sell_category, func.count(EstateDeal.id).label('unit_count')
     ).join(EstateDeal, EstateSell.deals).filter(
@@ -344,10 +322,7 @@ def get_manager_kpis(manager_id: int, year: int):
         EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"])
     ).group_by(EstateSell.estate_sell_category).all()
 
-    # Все расчеты рекордов переведены на поступления
-
-    # Лучший год по ПОСТУПЛЕНИЯМ
-    best_year_income_query =g.mysql_db_session.query(
+    best_year_income_query = g.mysql_db_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
@@ -355,8 +330,7 @@ def get_manager_kpis(manager_id: int, year: int):
         FinanceOperation.status_name == 'Проведено'
     ).group_by('income_year').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
-    # Лучший месяц за все время по ПОСТУПЛЕНИЯМ
-    best_month_income_query =g.mysql_db_session.query(
+    best_month_income_query = g.mysql_db_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
@@ -365,7 +339,6 @@ def get_manager_kpis(manager_id: int, year: int):
         FinanceOperation.status_name == 'Проведено'
     ).group_by('income_year', 'income_month').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
-    # Лучший месяц в выбранном году по ПОСТУПЛЕНИЯМ
     best_month_in_year_income_query = g.mysql_db_session.query(
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
@@ -407,22 +380,22 @@ def get_manager_complex_ranking(manager_id: int):
     """
     Возвращает рейтинг ЖК по количеству сделок и объему ПОСТУПЛЕНИЙ для менеджера.
     """
-    ranking = db.session.query(
+    # ИСПРАВЛЕНО: Используем g.mysql_db_session
+    ranking = g.mysql_db_session.query(
         EstateHouse.complex_name,
         func.sum(FinanceOperation.summa).label('total_income'),
         func.count(func.distinct(EstateDeal.id)).label('deal_count')
     ).join(EstateSell, EstateHouse.id == EstateSell.house_id) \
-     .join(EstateDeal, EstateSell.id == EstateDeal.estate_sell_id) \
-     .join(FinanceOperation, EstateSell.id == FinanceOperation.estate_sell_id) \
-     .filter(
+        .join(EstateDeal, EstateSell.id == EstateDeal.estate_sell_id) \
+        .join(FinanceOperation, EstateSell.id == FinanceOperation.estate_sell_id) \
+        .filter(
         EstateDeal.deal_manager_id == manager_id,
-        FinanceOperation.manager_id == manager_id, # Дополнительная связка для точности
+        FinanceOperation.manager_id == manager_id,
         FinanceOperation.status_name == "Проведено"
-     ) \
-     .group_by(EstateHouse.complex_name) \
-     .order_by(func.sum(FinanceOperation.summa).desc()) \
-     .all()
-
+    ) \
+        .group_by(EstateHouse.complex_name) \
+        .order_by(func.sum(FinanceOperation.summa).desc()) \
+        .all()
     return [{"name": r.complex_name, "total_income": r.total_income, "deal_count": r.deal_count} for r in ranking]
 
 
@@ -432,20 +405,18 @@ def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_
     Возвращает рейтинг менеджеров по количеству и объему сделок для ЖК.
     """
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
-    query = db.session.query(
-        User.full_name,
+    # ИСПРАВЛЕНО: Используем g.mysql_db_session и auth_models.SalesManager
+    query = g.mysql_db_session.query(
+        auth_models.SalesManager.users_name,
         func.count(EstateDeal.id).label('deal_count'),
         func.sum(EstateDeal.deal_sum).label('total_volume'),
         func.sum(EstateSell.estate_area).label('total_area')
-    ).join(EstateDeal, User.id == EstateDeal.deal_manager_id) \
+    ).join(EstateDeal, auth_models.SalesManager.id == EstateDeal.deal_manager_id) \
         .join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
         EstateHouse.complex_name == complex_name,
-        EstateDeal.deal_status_name.in_(sold_statuses),
-        User.is_active == True,
-        User.company_id == g.current_company_id,
-        User.role_name == 'manager'
+        EstateDeal.deal_status_name.in_(sold_statuses)
     )
 
     if start_date_str:
@@ -455,5 +426,7 @@ def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_
         end_date = date.fromisoformat(end_date_str)
         query = query.filter(func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date) <= end_date)
 
-    ranking = query.group_by(User.id).order_by(func.count(EstateDeal.id).desc()).all()
-    return ranking
+    ranking = query.group_by(auth_models.SalesManager.id).order_by(func.count(EstateDeal.id).desc()).all()
+    # ИСПРАВЛЕНО: Обращаемся к правильному полю users_name
+    return [{'full_name': r.users_name, 'deal_count': r.deal_count, 'total_volume': r.total_volume,
+             'total_area': r.total_area} for r in ranking]

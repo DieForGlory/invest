@@ -13,17 +13,17 @@ def get_calculator_settings():
     Использует паттерн "Синглтон", всегда работая с записью id=1.
     """
     # Используем planning_models.CalculatorSettings
-    settings = db.session.query(planning_models.CalculatorSettings).get(1)
+    settings = g.company_db_session.query(planning_models.CalculatorSettings).get(1)
     if not settings:
         settings = planning_models.CalculatorSettings(id=1)
-        db.session.add(settings)
-        db.session.commit()
+        g.company_db_session.add(settings)
+        g.company_db_session.commit()
     return settings
 
 
 def get_all_excluded_complexes():
     """Возвращает список всех исключенных ЖК."""
-    return db.session.query(ExcludedComplex).order_by(ExcludedComplex.complex_name).all()
+    return g.company_db_session.query(ExcludedComplex).order_by(ExcludedComplex.complex_name).all()
 
 
 def toggle_complex_exclusion(complex_name: str):
@@ -32,21 +32,21 @@ def toggle_complex_exclusion(complex_name: str):
     или удаляет, если он там уже есть.
     """
     try:
-        existing = db.session.query(ExcludedComplex).filter_by(complex_name=complex_name).first()
+        existing = g.company_db_session.query(ExcludedComplex).filter_by(complex_name=complex_name).first()
         if existing:
-            db.session.delete(existing)
+            g.company_db_session.delete(existing)
             message = f"Проект '{complex_name}' был удален из списка исключений."
             category = "success"
         else:
             new_exclusion = ExcludedComplex(complex_name=complex_name)
-            db.session.add(new_exclusion)
+            g.company_db_session.add(new_exclusion)
             message = f"Проект '{complex_name}' был добавлен в список исключений."
             category = "info"
 
-        db.session.commit()
+        g.company_db_session.commit()
         print(f"[SETTINGS SERVICE] ✅ Успешно обновлен статус исключения для ЖК: {complex_name}")
     except Exception as e:
-        db.session.rollback()
+        g.company_db_session.rollback()
         print(f"[SETTINGS SERVICE] ❌ Ошибка при обновлении статуса исключения: {e}")
         message = "Произошла ошибка при обновлении статуса исключения."
         category = "danger"
@@ -63,4 +63,4 @@ def update_calculator_settings(form_data):
     settings.time_value_rate_annual = float(form_data.get('time_value_rate_annual', 16.5))
     settings.standard_installment_min_dp_percent = float(form_data.get('standard_installment_min_dp_percent', 15.0))
 
-    db.session.commit()
+    g.company_db_session.commit()

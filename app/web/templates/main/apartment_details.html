@@ -117,24 +117,26 @@
 <div class="row g-4">
     <div class="col-lg-5">
         <div class="card-glass h-100 p-4">
-            <h4 class="card-title mb-4 border-bottom pb-2"><i class="bi bi-building me-2" style="color: var(--gh-gold);"></i> {{ data.apartment.house.complex_name if data.apartment and data.apartment.house else 'N/A' }}</h4>
+            <h4 class="card-title mb-4 border-bottom pb-2"><i class="bi bi-building me-2" style="color: var(--gh-gold);"></i> {{ data.apartment['house']['complex_name'] if data.apartment and data.apartment['house'] else 'N/A' }}</h4>
             <ul class="list-group list-group-flush">
                 {# --- ИЗМЕНЕНИЕ 3: Перевод значений Статуса и Типа объекта --- #}
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-check-circle me-2"></i>{{ _('Статус') }}</span><span class="badge fs-6 fw-normal bg-success-subtle border border-success-subtle text-success-emphasis rounded-pill">{{ _(data.apartment.estate_sell_status_name) if data.apartment else 'N/A' }}</span></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-house-door me-2"></i>{{ _('Номер дома') }}</span><strong>{{ data.apartment.house.geo_house if data.apartment and data.apartment.house else 'N/A' }}</strong></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-layers me-2"></i>{{ _('Этаж') }}</span><strong>{{ data.apartment.estate_floor if data.apartment else 'N/A' }}</strong></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-door-closed me-2"></i>{{ _('Комнаты') }}</span><strong>{{ data.apartment.estate_rooms if data.apartment else 'N/A' }}</strong></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-arrows-fullscreen me-2"></i>{{ _('Площадь') }}</span><strong>{{ data.apartment.estate_area if data.apartment else 'N/A' }} м²</strong></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-building-fill-check me-2"></i>{{ _('Тип объекта') }}</span><strong>{{ _(data.apartment.estate_sell_category) if data.apartment else 'N/A' }}</strong></li>
-                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-tag me-2"></i>{{ _('Базовая цена') }}</span><strong>{{ "{:,.0f}".format(data.apartment.estate_price) if data.apartment and data.apartment.estate_price is not none else 'N/A' }} UZS</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-check-circle me-2"></i>{{ _('Статус') }}</span><span class="badge fs-6 fw-normal bg-success-subtle border border-success-subtle text-success-emphasis rounded-pill">{{ _(data.apartment['estate_sell_status_name']) if data.apartment else 'N/A' }}</span></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-house-door me-2"></i>{{ _('Номер дома') }}</span><strong>{{ data.apartment['house']['geo_house'] if data.apartment and data.apartment['house'] else 'N/A' }}</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-layers me-2"></i>{{ _('Этаж') }}</span><strong>{{ data.apartment['estate_floor'] if data.apartment else 'N/A' }}</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-door-closed me-2"></i>{{ _('Комнаты') }}</span><strong>{{ data.apartment['estate_rooms'] if data.apartment else 'N/A' }}</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-arrows-fullscreen me-2"></i>{{ _('Площадь') }}</span><strong>{{ data.apartment['estate_area'] if data.apartment else 'N/A' }} м²</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-building-fill-check me-2"></i>{{ _('Тип объекта') }}</span><strong>{{ _(data.apartment['estate_sell_category']) if data.apartment else 'N/A' }}</strong></li>
+                <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-tag me-2"></i>{{ _('Базовая цена') }}</span><strong>{{ "{:,.0f}".format(data.apartment['estate_price']) if data.apartment and data.apartment['estate_price'] is not none else 'N/A' }} UZS</strong></li>
             </ul>
 
+            {% if data.apartment and data.apartment['id'] %}
             <div class="d-grid mt-4">
-                <a href="{{ url_for('complex_calc.show_page', sell_id=data.apartment.id) }}" class="btn btn-outline-warning btn-lg">
+                <a href="{{ url_for('complex_calc.show_page', sell_id=data.apartment['id']) }}" class="btn btn-outline-warning btn-lg">
                     <i class="bi bi-calculator-fill me-2"></i>
                     {{ _('Сложные расчёты') }}
                 </a>
             </div>
+            {% endif %}
             </div>
     </div>
 

@@ -89,30 +89,30 @@ class EmailRecipient(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('system_users.id'), nullable=False, unique=True)
     user = db.relationship('User')
 
+
 class SalesManager(db.Model):
     __tablename__ = 'users'  # This is the actual sales managers table
     id = db.Column(db.Integer, primary_key=True)
     users_name = db.Column(db.String(255), nullable=False)
     post_title = db.Column(db.String(255), nullable=True)
-    is_fired = db.Column(db.Boolean, default=False)
+    # --- УДАЛЯЕМ ЭТУ СТРОКУ ---
+    # is_fired = db.Column(db.Boolean, default=False)
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
-    
+
     company = db.relationship('Company')
-    
+
     @property
     def full_name(self):
         return self.users_name
-    
-    @property
-    def is_active(self):
-        return not self.is_fired
-    
-    def __repr__(self):
-        return f'<SalesManager {self.full_name}>'
 
     @property
-    def is_fired(self):
-        return not self.is_active
+    def is_active(self):
+        # --- ИЗМЕНЯЕМ ЛОГИКУ ---
+        # Теперь просто возвращаем True, так как все менеджеры считаются активными
+        return True
+
+    def __repr__(self):
+        return f'<SalesManager {self.full_name}>'
 
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),

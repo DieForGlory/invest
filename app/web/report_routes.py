@@ -330,7 +330,6 @@ def manager_performance_report():
 
     # 1. Query managers from users table
     query = g.mysql_db_session.query(auth_models.SalesManager)
-    query = query.filter(auth_models.SalesManager.is_fired == False)
     if search_query:
         query = query.filter(auth_models.SalesManager.users_name.ilike(f'%{search_query}%'))
 

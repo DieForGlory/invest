@@ -1,6 +1,6 @@
 # app/web/main_routes.py
 
-
+import json
 from datetime import datetime
 from flask import session, g
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, json
@@ -134,6 +134,10 @@ def selection():
 @permission_required('view_selection')
 def apartment_details(sell_id):
     card_data = get_apartment_card_data(sell_id)
+    print("\n" + "=" * 50)
+    print(f"--- [ОТЛАДКА] ДАННЫЕ ДЛЯ КАРТОЧКИ ОБЪЕКТА ID: {sell_id} ---")
+    print(json.dumps(card_data, indent=4, ensure_ascii=False))
+    print("=" * 50 + "\n")
     all_discounts_data = card_data.pop('all_discounts_for_property_type', [])
 
     return render_template(

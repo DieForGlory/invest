@@ -45,7 +45,7 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     query = g.mysql_db_session.query(EstateSell).options(
         joinedload(EstateSell.house)
     ).filter(
-        EstateSell.estate_sell_category == property_type_enum.value,
+        EstateSell.estate_sell_category == property_type_enum.name,
         EstateSell.estate_sell_status_name.in_(VALID_STATUSES),
         EstateSell.estate_price.isnot(None),
         EstateSell.estate_price > DEDUCTION_AMOUNT,
@@ -127,7 +127,7 @@ def get_apartment_card_data(sell_id: int):
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 
     try:
-        property_type_enum = planning_models.PropertyType(sell.estate_sell_category)
+        property_type_enum = planning_models.PropertyType[sell.estate_sell_category.upper()]
     except ValueError:
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 

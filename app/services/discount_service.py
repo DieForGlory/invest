@@ -19,7 +19,7 @@ from .email_service import send_email
 def delete_draft_version(version_id: int):
     """Удаляет версию, если она никогда не была активна."""
     # Обращаемся к модели через planning_models
-    version_to_delete = db.session.query(planning_models.DiscountVersion).get(version_id)
+    version_to_delete = g.company_db_session.query(planning_models.DiscountVersion).get(version_id)
     if not version_to_delete:
         raise ValueError("Версия для удаления не найдена.")
 
@@ -27,8 +27,8 @@ def delete_draft_version(version_id: int):
         raise PermissionError("Нельзя удалить версию, которая уже была активирована.")
 
     print(f"[DISCOUNT SERVICE] 🗑️ Удаление черновика версии №{version_to_delete.version_number} (ID: {version_id})")
-    db.session.delete(version_to_delete)
-    db.session.commit()
+    g.company_db_session.delete(version_to_delete)
+    g.company_db_session.commit()
     print(f"[DISCOUNT SERVICE] ✔️ Черновик успешно удален.")
 
 def get_current_usd_rate():
@@ -73,7 +73,7 @@ def process_discounts_from_excel(file_path: str, version_id: int):
     created_count, updated_count = 0, 0
     existing_discounts = {
         (d.complex_name, d.property_type, d.payment_method): d
-        for d in db.session.query(planning_models.Discount).filter_by(version_id=version_id).all()
+        for d in g.company_db_session.query(planning_models.Discount).filter_by(version_id=version_id).all()
     }
 
     for index, row in df.iterrows():
@@ -96,7 +96,7 @@ def process_discounts_from_excel(file_path: str, version_id: int):
                     property_type=property_type_enum,
                     payment_method=payment_method_enum
                 )
-                db.session.add(discount)
+                g.company_db_session.add(discount)
                 created_count += 1
             else:
                 updated_count += 1
@@ -117,7 +117,7 @@ def process_discounts_from_excel(file_path: str, version_id: int):
                 discount.cadastre_date = None
         except Exception as ex:
             print(f"[DISCOUNT SERVICE] ❌ ОШИБКА ОБРАБОТКИ СТРОКИ {index}: {ex}. Пропускаю.")
-    db.session.commit()
+    g.company_db_session.commit()
     print(f"[DISCOUNT SERVICE] Завершение. Создано: {created_count}, Обновлено: {updated_count}.")
     return f"Обработано {len(df)} строк. Создано: {created_count}, Обновлено: {updated_count}."
 
@@ -144,7 +144,7 @@ def get_discounts_with_summary():
     """
     Получает данные для страницы "Система скидок", включая комментарии к ЖК.
     """
-    active_version = db.session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version: 
         print("[DISCOUNT SERVICE] ⚠️ Активная версия не найдена")
         return {}
@@ -152,7 +152,7 @@ def get_discounts_with_summary():
     all_discounts = active_version.discounts
     if not all_discounts:
         print(f"[DISCOUNT SERVICE] ⚠️ Для активной версии {active_version.id} не найдены скидки")
-    comments = db.session.query(planning_models.ComplexComment).filter_by(version_id=active_version.id).all()
+    comments = g.company_db_session.query(planning_models.ComplexComment).filter_by(version_id=active_version.id).all()
     comments_map = {c.complex_name: c.comment for c in comments}
 
     if not all_discounts: return {}
@@ -249,11 +249,11 @@ def _generate_version_comparison_summary(old_version, new_version, comments_data
 
 def create_blank_version(comment: str):
     """Создает новую, ПУСТУЮ запись о версии скидок БЕЗ КОММИТА."""
-    latest_version = db.session.query(planning_models.DiscountVersion).order_by(planning_models.DiscountVersion.version_number.desc()).first()
+    latest_version = g.company_db_session.query(planning_models.DiscountVersion).order_by(planning_models.DiscountVersion.version_number.desc()).first()
     new_version_number = (latest_version.version_number + 1) if latest_version else 1
     new_version = planning_models.DiscountVersion(version_number=new_version_number, comment=comment)
-    db.session.add(new_version)
-    db.session.flush()
+    g.company_db_session.add(new_version)
+    g.company_db_session.flush()
     print(f"[DISCOUNT SERVICE] ✔️ Подготовлена пустая версия №{new_version_number}")
     return new_version
 
@@ -263,20 +263,20 @@ def clone_version_for_editing(active_version):
     Создает полную копию активной версии в виде нового неактивного черновика.
     """
     if not active_version: raise ValueError("Нет активной версии для клонирования.")
-    latest_version = db.session.query(planning_models.DiscountVersion).order_by(planning_models.DiscountVersion.version_number.desc()).first()
+    latest_version = g.company_db_session.query(planning_models.DiscountVersion).order_by(planning_models.DiscountVersion.version_number.desc()).first()
     new_version_number = latest_version.version_number + 1
     draft_version = planning_models.DiscountVersion(version_number=new_version_number, comment=f"Черновик на основе v.{active_version.version_number}", is_active=False)
-    db.session.add(draft_version)
-    db.session.flush()
+    g.company_db_session.add(draft_version)
+    g.company_db_session.flush()
 
     for old_discount in active_version.discounts:
         new_discount = planning_models.Discount(version_id=draft_version.id, **{k: getattr(old_discount, k) for k in ['complex_name', 'property_type', 'payment_method', 'mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action', 'cadastre_date']})
-        db.session.add(new_discount)
+        g.company_db_session.add(new_discount)
     for old_comment in active_version.complex_comments:
         new_comment = planning_models.ComplexComment(version_id=draft_version.id, complex_name=old_comment.complex_name, comment=old_comment.comment)
-        db.session.add(new_comment)
+        g.company_db_session.add(new_comment)
 
-    db.session.commit()
+    g.company_db_session.commit()
     print(f"[DISCOUNT SERVICE] ✔️ Создан черновик версии №{draft_version.version_number}")
     return draft_version
 
@@ -285,7 +285,7 @@ def update_discounts_for_version(version_id: int, form_data: dict, changes_json:
     """
     Обновляет скидки для УКАЗАННОЙ ВЕРСИИ (черновика) и ПЕРЕЗАПИСЫВАЕТ JSON-саммари.
     """
-    target_version = db.session.query(planning_models.DiscountVersion).get(version_id)
+    target_version = g.company_db_session.query(planning_models.DiscountVersion).get(version_id)
     if not target_version or target_version.is_active: return "Ошибка: Версия не найдена или активна."
 
     discounts_map = {(d.complex_name, d.property_type.value, d.payment_method.value): d for d in target_version.discounts}
@@ -306,7 +306,7 @@ def update_discounts_for_version(version_id: int, form_data: dict, changes_json:
 
     target_version.changes_summary_json = changes_json
     if updated_fields_count > 0:
-        db.session.commit()
+        g.company_db_session.commit()
         return "Изменения успешно сохранены."
     g.company_db_session.rollback() # No need to commit if only JSON changed
     return "Изменений для сохранения не найдено."
@@ -316,16 +316,16 @@ def activate_version(version_id: int, activation_comment: str = None):
     """
     Активирует версию, обновляет ее комментарий и готовит данные для email.
     """
-    target_version = db.session.query(planning_models.DiscountVersion).get(version_id)
+    target_version = g.company_db_session.query(planning_models.DiscountVersion).get(version_id)
     if not target_version: raise ValueError(f"Не найдена версия с ID: {version_id}")
 
     if activation_comment: target_version.comment = activation_comment
-    old_active_version = db.session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    old_active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if old_active_version: old_active_version.is_active = False
 
     target_version.is_active = True
     target_version.was_ever_activated = True
-    db.session.commit()
+    g.company_db_session.commit()
 
     if old_active_version:
         comments_data = json.loads(target_version.changes_summary_json) if target_version.changes_summary_json else None

@@ -121,10 +121,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const typeKey = paymentOptionCard.dataset.typeKey;
 
             // Используем in для проверки наличия свойства, а не его значения
-            if (discountType in appliedAdditionalDiscounts[typeKey].details) {
-                delete appliedAdditionalDiscounts[typeKey].details[discountType];
+            if (appliedAdditionalDiscounts[typeKey].details[discountType] > 0) {
+                // Если да, отключаем ее, устанавливая значение в 0
+                appliedAdditionalDiscounts[typeKey].details[discountType] = 0.0;
                 this.classList.remove('active');
             } else {
+                // Если нет, включаем, присваивая максимальное значение
                 appliedAdditionalDiscounts[typeKey].details[discountType] = maxPercent;
                 this.classList.add('active');
             }

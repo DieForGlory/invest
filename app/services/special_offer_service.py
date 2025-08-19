@@ -302,7 +302,7 @@ def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
 
 def delete_special_offer(special_id):
     """Удаляет специальное предложение и его изображение."""
-    special_to_delete = MonthlySpecial.query.get_or_404(special_id)
+    special_to_delete = g.company_db_session.query(MonthlySpecial).get_or_404(special_id)
 
     # Удаляем файл изображения с сервера
     image_path = os.path.join(current_app.static_folder, UPLOAD_FOLDER, special_to_delete.floor_plan_image_filename)
@@ -316,7 +316,7 @@ def delete_special_offer(special_id):
 
 def extend_special_offer(special_id: int):
     """Продлевает срок действия предложения."""
-    special = MonthlySpecial.query.get_or_404(special_id)
+    special = g.company_db_session.query(MonthlySpecial).get_or_404(special_id)
     special.extend_offer()
     g.company_db_session.commit()
     return special
