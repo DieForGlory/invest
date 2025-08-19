@@ -8,7 +8,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">{{ _('Сводный план-фактный отчет') }}</h1>
-    <a href="{{ url_for('report.export_plan_fact', year=selected_year, month=selected_month, property_type=selected_prop_type, period=selected_period) }}" class="btn btn-outline-success">
+    <a id="export-link" data-base-url="{{ url_for('report.export_plan_fact', year=selected_year, month=selected_month, property_type=selected_prop_type, period=selected_period) }}" href="{{ url_for('report.export_plan_fact', year=selected_year, month=selected_month, property_type=selected_prop_type, period=selected_period) }}" class="btn btn-outline-success">
         <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Экспорт') }}
     </a>
 </div>
@@ -22,7 +22,7 @@
                 </button>
             </h2>
         </div>
-        <div id="collapseFilters" class="collapse" aria-labelledby="filterHeader" data-bs-parent="#filterAccordion">
+        <div id="collapseFilters" class="collapse show" aria-labelledby="filterHeader" data-bs-parent="#filterAccordion">
             <div class="card-body">
                 <form method="GET" action="{{ url_for('report.plan_fact_report') }}">
                     <div class="row g-3 align-items-end">
@@ -51,15 +51,18 @@
                                 {% for pt in property_types %}<option value="{{ pt.value }}" {% if pt.value == selected_prop_type %}selected{% endif %}>{{ _(pt.value) }}</option>{% endfor %}
                             </select>
                         </div>
-                        <div class="col-lg-auto col-md-3"><button type="submit" class="btn btn-primary w-100">{{ _('Показать') }}</button></div>
                         <div class="col-lg-auto col-md-3">
-                            <div class="form-check form-switch fs-5">
-                                <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
-                                <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
-                            </div>
+                           <label for="currency" class="form-label">{{ _('Валюта') }}</label>
+                           <select id="currency" class="form-select">
+                               <option value="UZS">UZS</option>
+                               <option value="USD">USD</option>
+                           </select>
                         </div>
-                        <div class="col-lg-auto col-md-4">
-                            <div class="form-check form-switch fs-5 pt-4">
+                        <div class="col-lg-auto col-md-3">
+                            <button type="submit" class="btn btn-primary w-100">{{ _('Показать') }}</button>
+                        </div>
+                        <div class="col-lg-auto col-md-4 align-self-center">
+                            <div class="form-check form-switch pt-3">
                                 <input class="form-check-input" type="checkbox" role="switch" id="hideZeroPlanToggle">
                                 <label class="form-check-label text-muted" for="hideZeroPlanToggle">{{ _('Скрыть нулевые планы') }}</label>
                             </div>
@@ -126,7 +129,7 @@
                         <div class="metric-value">{{ "{:,.0f}".format(row.fact_units) }} / <span class="plan-value">{{ "{:,.0f}".format(row.plan_units) }}</span></div>
                         {% set p_units = row.percent_fact_units %}
                         <div class="progress" style="height: 6px;">
-                            <div class="progress-bar p-{{ 'success' if p_units >= 95 else 'warning' if p_units >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_units }}%;" aria-valuenow="{{ p_units }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            <div class="progress-bar p-bg-{{ 'success' if p_units >= 95 else 'warning' if p_units >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_units }}%;" aria-valuenow="{{ p_units }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                     </div>
                     <div class="col-md-4 metric-block">
@@ -134,7 +137,7 @@
                         <div class="metric-value currency-value" data-uzs-value="{{ row.fact_volume }}">{{ "{:,.0f}".format(row.fact_volume)|replace(',', ' ') }}</div>
                         {% set p_vol = row.percent_fact_volume %}
                          <div class="progress" style="height: 6px;">
-                            <div class="progress-bar p-{{ 'success' if p_vol >= 95 else 'warning' if p_vol >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_vol }}%;" aria-valuenow="{{ p_vol }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            <div class="progress-bar p-bg-{{ 'success' if p_vol >= 95 else 'warning' if p_vol >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_vol }}%;" aria-valuenow="{{ p_vol }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                     </div>
                     <div class="col-md-4 metric-block">
@@ -142,7 +145,7 @@
                         <div class="metric-value currency-value" data-uzs-value="{{ row.fact_income }}">{{ "{:,.0f}".format(row.fact_income)|replace(',', ' ') }}</div>
                         {% set p_inc = row.percent_fact_income %}
                         <div class="progress" style="height: 6px;">
-                            <div class="progress-bar p-{{ 'success' if p_inc >= 95 else 'warning' if p_inc >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_inc }}%;" aria-valuenow="{{ p_inc }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            <div class="progress-bar p-bg-{{ 'success' if p_inc >= 95 else 'warning' if p_inc >= 75 else 'danger' }}" role="progressbar" style="width: {{ p_inc }}%;" aria-valuenow="{{ p_inc }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                     </div>
                 </div>
@@ -156,25 +159,23 @@
 
 {% block scripts %}
     {{ super() }}
-    <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
-            const periodSelect = document.getElementById('period');
-            const monthSelect = document.getElementById('month');
+        document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13050 }}";
+        const periodSelect = document.getElementById('period');
+        const monthSelect = document.getElementById('month');
 
-            function toggleMonthSelect() {
-                const monthCol = monthSelect.closest('.col-lg');
-                if (periodSelect.value === 'monthly') {
-                    monthSelect.disabled = false;
-                    if(monthCol) monthCol.style.display = 'block';
-                } else {
-                    monthSelect.disabled = true;
-                    if(monthCol) monthCol.style.display = 'none';
-                }
+        function toggleMonthSelect() {
+            const monthCol = monthSelect.closest('.col-lg');
+            if (periodSelect.value === 'monthly') {
+                monthSelect.disabled = false;
+                if(monthCol) monthCol.style.display = 'block';
+            } else {
+                monthSelect.disabled = true;
+                if(monthCol) monthCol.style.display = 'none';
             }
-            toggleMonthSelect();
-            periodSelect.addEventListener('change', toggleMonthSelect);
-        });
+        }
+        toggleMonthSelect();
+        periodSelect.addEventListener('change', toggleMonthSelect);
     </script>
+    <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
 {% endblock %}

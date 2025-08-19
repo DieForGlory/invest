@@ -1,6 +1,6 @@
 # app/services/selection_service.py
 
-from flask import current_app, abort,g
+from flask import current_app, abort, g
 from sqlalchemy.orm import joinedload
 from ..core.extensions import db
 import json
@@ -10,6 +10,8 @@ from datetime import date
 from ..models.estate_models import EstateHouse, EstateSell
 from ..models import planning_models
 from ..models.exclusion_models import ExcludedSell
+# --- ДОБАВЛЕН ИМПОРТ СЕРВИСА ВАЛЮТ ---
+from . import currency_service
 
 VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
 DEDUCTION_AMOUNT = 3_000_000
@@ -22,7 +24,11 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     """
     Финальная версия с исправленной логикой области видимости переменной discount.
     """
-    usd_rate = current_app.config.get('USD_TO_UZS_RATE', 12650.0)
+    # --- ИЗМЕНЕНИЕ: Получаем курс из сервиса валют ---
+    usd_rate = currency_service.get_current_effective_rate()
+    if not usd_rate:
+        raise ValueError("Не удалось получить актуальный курс валют из настроек.")
+
     budget_uzs = budget * usd_rate if currency.upper() == 'USD' else budget
 
     print(f"\n[SELECTION_SERVICE] 🔎 Поиск. Бюджет: {budget} {currency}. Тип: {property_type_str}")
@@ -38,7 +44,8 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     discounts_map = {
         (d.complex_name, d.payment_method): d
         for d in
-        g.company_db_session.query(planning_models.Discount).filter_by(version_id=active_version.id, property_type=property_type_enum).all()
+        g.company_db_session.query(planning_models.Discount).filter_by(version_id=active_version.id,
+                                                                       property_type=property_type_enum).all()
     }
     excluded_sell_ids = {e.sell_id for e in g.company_db_session.query(ExcludedSell).all()}
 
@@ -128,7 +135,8 @@ def get_apartment_card_data(sell_id: int):
 
     try:
         property_type_enum = planning_models.PropertyType[sell.estate_sell_category.upper()]
-    except ValueError:
+    except (KeyError, AttributeError):
+        # Если у объекта недвижимости не указан тип - возвращаем пустые данные
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 
     all_discounts_for_property_type = g.company_db_session.query(planning_models.Discount).filter_by(
@@ -164,7 +172,12 @@ def get_apartment_card_data(sell_id: int):
 
     pricing_options = []
     base_price = serialized_apartment['estate_price']
-    price_after_deduction = base_price - DEDUCTION_AMOUNT
+
+    # Проверка на None перед вычитанием
+    if base_price is None:
+        price_after_deduction = 0
+    else:
+        price_after_deduction = base_price - DEDUCTION_AMOUNT
 
     if sell.estate_sell_category == planning_models.PropertyType.FLAT.value:
         # Расчет для "Легкий старт (100% оплата)"
