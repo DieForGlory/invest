@@ -118,8 +118,9 @@ class ManagerSalesPlan(db.Model):
     # Явно указываем ORM, как соединять таблицы
     manager = db.relationship(
         'app.models.auth_models.SalesManager',
-        primaryjoin='ManagerSalesPlan.manager_id == foreign(app.models.auth_models.SalesManager.id)',
-        backref='sales_plans'  # Добавляет удобную обратную связь manager.sales_plans
+        primaryjoin='ManagerSalesPlan.manager_id == app.models.auth_models.SalesManager.id',
+        foreign_keys=[manager_id],
+        backref='sales_plans'
     )
 
     __table_args__ = (

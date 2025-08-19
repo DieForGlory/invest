@@ -15,7 +15,7 @@ class EstateDeal(db.Model):
     deal_sum = db.Column(db.Float, nullable=True)
     # ИЗМЕНЕНИЕ: Добавляем связь с EstateSell, чтобы легко получать всю информацию
     sell = db.relationship('EstateSell')
-    deal_manager_id = db.Column(db.Integer, db.ForeignKey('sales_managers.id'), nullable=True, index=True)
+    deal_manager_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     manager = db.relationship('SalesManager')
     # data_hash = db.Column(db.String(64), index=True, nullable=True) # <-- СТРОКА УДАЛЕНА
 

@@ -13,7 +13,8 @@ class EstateBuy(db.Model):
 
 class EstateBuysStatusLog(db.Model):
     __tablename__ = 'estate_buys_statuses_log'
-    manager_id = db.Column(db.Integer, db.ForeignKey('sales_managers.id'), nullable=True)
+    manager_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    manager = db.relationship('SalesManager')
     id = db.Column(db.Integer, primary_key=True)
     log_date = db.Column(db.DateTime)
     estate_buy_id = db.Column(db.Integer)

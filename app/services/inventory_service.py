@@ -1,24 +1,29 @@
 # app/services/inventory_service.py
 
-from collections import defaultdict
-from app.core.extensions import db
-import pandas as pd
 import io
+from collections import defaultdict
+
+import pandas as pd
 from flask import g
 
+from app.core.extensions import db
+from app.models.estate_models import EstateSell, EstateHouse
+from app.models.exclusion_models import ExcludedComplex
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модели из их нового местоположения
 from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyType
-from app.models.estate_models import EstateSell, EstateHouse
-from app.models.exclusion_models import ExcludedComplex
 
 
 def get_inventory_summary_data():
     """
     Собирает данные по остаткам и возвращает детализацию и общую сводку. (ИСПРАВЛЕННАЯ ВЕРСИЯ)
     """
-    excluded_complex_names = {c.complex_name for c in g.company_db_session.query(ExcludedComplex).all()}
-    active_version = g.company_db_session.query(DiscountVersion).filter_by(is_active=True).first()
+    # Получаем список исключенных ЖК из основной БД
+    excluded_complex_names = {c.complex_name for c in db.session.query(ExcludedComplex).all()}
+    print(f"[ИНВЕНТАРИЗАЦИЯ] ✅ Найдено {len(excluded_complex_names)} исключенных ЖК: {', '.join(excluded_complex_names) if excluded_complex_names else 'нет'}")
+
+    # Получаем активную версию скидок
+    active_version = db.session.query(DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return {}, {}
 
@@ -38,7 +43,9 @@ def get_inventory_summary_data():
         EstateSell.estate_area > 0
     )
 
+    # Применяем исключения ЖК
     if excluded_complex_names:
+        print(f"[ИНВЕНТАРИЗАЦИЯ] ℹ️ Применяю фильтр исключений к запросу")
         unsold_sells_query = unsold_sells_query.join(EstateSell.house).filter(
             EstateHouse.complex_name.notin_(excluded_complex_names)
         )
@@ -50,11 +57,11 @@ def get_inventory_summary_data():
     }))
 
     for sell in unsold_sells:
-        if not sell.house:
+        if not sell.house or not sell.house.complex_name:
             continue
         try:
             # ИСПРАВЛЕНИЕ: Правильное сопоставление Enum по системному имени из БД
-            prop_type_enum = PropertyType[sell.estate_sell_category]
+            prop_type_enum = PropertyType[sell.estate_sell_category.upper()]
             complex_name = sell.house.complex_name
         except KeyError:
             continue

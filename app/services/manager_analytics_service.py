@@ -3,7 +3,7 @@
 from sqlalchemy import func, extract
 from collections import defaultdict
 from ..core.extensions import db
-from ..models.auth_models import SalesManager
+from ..models.auth_models import User
 from ..models.funnel_models import EstateBuysStatusLog
 from ..models.estate_models import EstateDeal
 from flask import g
@@ -13,9 +13,12 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
     Собирает аналитические данные по менеджерам за указанный период.
     """
     # ... (Блоки 1, 2 и 3 без изменений) ...
-    manager_query = g.mysql_db_session.query(SalesManager)
+    manager_query = g.mysql_db_session.query(User).filter(
+        User.user_type == 'manager',
+        User.is_active == True
+    )
     if post_title and post_title != 'all':
-        manager_query = manager_query.filter(SalesManager.post_title == post_title)
+        manager_query = manager_query.filter(User.post_title == post_title)
 
     managers = manager_query.all()
     if not managers:

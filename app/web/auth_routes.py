@@ -47,11 +47,24 @@ def logout():
 @permission_required('manage_users')
 def user_management():
     form = CreateUserForm()
-    # Загружаем роли из auth_models
-    form.role.choices = [(r.id, r.name) for r in auth_models.Role.query.order_by('name').all()]
+    
+    # Загружаем доступные роли
+    if current_user.role.name == 'SUPER_ADMIN':
+        # Супер-админ видит все роли
+        available_roles = auth_models.Role.query.order_by('name').all()
+    else:
+        # Админы не видят роль SUPER_ADMIN
+        available_roles = auth_models.Role.query.filter(auth_models.Role.name != 'SUPER_ADMIN').order_by('name').all()
+    
+    form.role.choices = [(r.id, r.name) for r in available_roles]
 
     if form.validate_on_submit():
+        # Проверка прав на создание пользователя с выбранной ролью
         role_obj = auth_models.Role.query.get(form.role.data)
+        if role_obj.name == 'SUPER_ADMIN' and current_user.role.name != 'SUPER_ADMIN':
+            flash('Вы не можете создавать супер-администраторов.', 'danger')
+            return redirect(url_for('auth.user_management'))
+
         user = auth_models.User(
             username=form.username.data,
             role=role_obj,
@@ -59,13 +72,25 @@ def user_management():
             email=form.email.data,
             phone_number=form.phone_number.data
         )
+
+        # Устанавливаем company_id для нового пользователя
+        if current_user.role.name != 'SUPER_ADMIN':
+            user.company_id = current_user.company_id
+
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
         flash(f'Пользователь {user.username} успешно создан.', 'success')
         return redirect(url_for('auth.user_management'))
 
-    users = auth_models.User.query.order_by(auth_models.User.id).all()
+    # Логика для фильтрации видимости пользователей
+    if current_user.role.name == 'SUPER_ADMIN':
+        # Супер-админ видит всех
+        users = auth_models.User.query.order_by(auth_models.User.id).all()
+    else:
+        # Админ видит пользователей своей компании
+        users = auth_models.User.query.filter_by(company_id=current_user.company_id).order_by(auth_models.User.id).all()
+
     return render_template('auth/user_management.html', title="Управление пользователями", users=users, form=form)
 
 
@@ -78,6 +103,17 @@ def delete_user(user_id):
         return redirect(url_for('auth.user_management'))
 
     user_to_delete = auth_models.User.query.get_or_404(user_id)
+
+    # Проверка прав на удаление
+    if current_user.role.name != 'SUPER_ADMIN' and user_to_delete.company_id != current_user.company_id:
+        flash('Вы не можете удалять пользователей других компаний.', 'danger')
+        return redirect(url_for('auth.user_management'))
+
+    # Запрет на удаление супер-админа
+    if user_to_delete.role.name == 'SUPER_ADMIN' and current_user.role.name != 'SUPER_ADMIN':
+        flash('Вы не можете удалять супер-администраторов.', 'danger')
+        return redirect(url_for('auth.user_management'))
+
     db.session.delete(user_to_delete)
     db.session.commit()
     flash(f'Пользователь {user_to_delete.username} удален.', 'success')

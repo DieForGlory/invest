@@ -9,15 +9,18 @@ from sqlalchemy import func, extract
 import io
 from flask import g
 from app.core.extensions import db
+from ..core.db_utils import require_mysql_db
 
 # Обновленные импорты
 from app.models import auth_models
 from app.models import planning_models
 from app.models.estate_models import EstateDeal, EstateSell, EstateHouse
 from app.models.finance_models import FinanceOperation
-from app.services import currency_service
+from app.models.auth_models import User
+from ..models import planning_models
+from . import currency_service
 
-
+@require_mysql_db
 def process_manager_plans_from_excel(file_path: str):
     """
     Обрабатывает Excel-файл с персональными планами менеджеров.
@@ -27,7 +30,7 @@ def process_manager_plans_from_excel(file_path: str):
     # В регулярном выражении оставляем только "поступления"
     header_pattern = re.compile(r"(поступления) (\d{2}\.\d{2}\.\d{4})", re.IGNORECASE)
 
-    managers_map = {m.full_name: m.id for m in g.mysql_db_session.query(auth_models.SalesManager).all()}
+    managers_map = {m.full_name: m.id for m in g.mysql_db_session.query(User).filter(User.role_name == 'manager', User.is_active == True).all()}
 
     for index, row in df.iterrows():
         manager_name = row.iloc[0]
@@ -71,12 +74,18 @@ def process_manager_plans_from_excel(file_path: str):
     return f"Успешно обработано планов: создано {created_count}, обновлено {updated_count}."
 
 
+@require_mysql_db
 def get_manager_performance_details(manager_id: int, year: int):
     """
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
     ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
     """
-    manager = g.mysql_db_session.query(auth_models.SalesManager).get(manager_id)
+    manager = g.mysql_db_session.query(User).filter(
+        User.id == manager_id,
+        User.is_active == True,
+        User.company_id == g.current_company_id,
+        User.role_name == 'manager'
+    ).first()
     if not manager:
         return None
 
@@ -132,11 +141,16 @@ def get_manager_performance_details(manager_id: int, year: int):
     return {'manager_id': manager_id, 'manager_name': manager.full_name, 'performance': report}
 
 
+@require_mysql_db
 def generate_manager_plan_template_excel():
     """
     Генерирует Excel-файл с ФИО всех менеджеров и столбцами планов на текущий год.
     """
-    managers = g.mysql_db_session.query(auth_models.SalesManager).order_by(auth_models.SalesManager.full_name).all()
+    managers = g.mysql_db_session.query(User).filter(
+        User.is_active == True,
+        User.company_id == g.current_company_id,
+        User.role_name == 'manager'
+    ).order_by(User.full_name).all()
     manager_names = [manager.full_name for manager in managers]
 
     current_year = date.today().year
@@ -179,6 +193,7 @@ def calculate_manager_kpi(plan_income: float, fact_income: float) -> float:
     return bonus
 
 
+@require_mysql_db
 def generate_kpi_report_excel(year: int, month: int):
     """
     Создает детализированный и отформатированный отчет по KPI менеджеров в формате Excel.
@@ -203,9 +218,12 @@ def generate_kpi_report_excel(year: int, month: int):
     plans_map = {p.manager_id: p for p in plans}
 
     # 3. ШАГ Б: Получаем из основной базы данных всех менеджеров, чьи ID мы нашли
-    managers = g.mysql_db_session.query(auth_models.SalesManager).filter(
-        auth_models.SalesManager.id.in_(manager_ids_with_plans)
-    ).order_by(auth_models.SalesManager.full_name).all()
+    managers = g.mysql_db_session.query(User).filter(
+        User.id.in_(manager_ids_with_plans),
+        User.is_active == True,
+        User.company_id == g.current_company_id,
+        User.role_name == 'manager'
+    ).order_by(User.full_name).all()
 
     # 4. Собираем исходные данные, объединяя результаты в Python
     source_data = []
@@ -304,6 +322,7 @@ def generate_kpi_report_excel(year: int, month: int):
     return output
 
 
+@require_mysql_db
 def get_manager_kpis(manager_id: int, year: int):
     """
     Рассчитывает расширенные KPI для одного менеджера на основе ПОСТУПЛЕНИЙ.
@@ -383,6 +402,7 @@ def get_manager_kpis(manager_id: int, year: int):
     return kpis
 
 
+@require_mysql_db
 def get_manager_complex_ranking(manager_id: int):
     """
     Возвращает рейтинг ЖК по количеству сделок и объему ПОСТУПЛЕНИЙ для менеджера.
@@ -406,22 +426,26 @@ def get_manager_complex_ranking(manager_id: int):
     return [{"name": r.complex_name, "total_income": r.total_income, "deal_count": r.deal_count} for r in ranking]
 
 
+@require_mysql_db
 def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_date_str: str = None):
     """
     Возвращает рейтинг менеджеров по количеству и объему сделок для ЖК.
     """
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
     query = db.session.query(
-        auth_models.SalesManager.full_name,
+        User.full_name,
         func.count(EstateDeal.id).label('deal_count'),
         func.sum(EstateDeal.deal_sum).label('total_volume'),
         func.sum(EstateSell.estate_area).label('total_area')
-    ).join(EstateDeal, auth_models.SalesManager.id == EstateDeal.deal_manager_id) \
+    ).join(EstateDeal, User.id == EstateDeal.deal_manager_id) \
         .join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
         EstateHouse.complex_name == complex_name,
-        EstateDeal.deal_status_name.in_(sold_statuses)
+        EstateDeal.deal_status_name.in_(sold_statuses),
+        User.is_active == True,
+        User.company_id == g.current_company_id,
+        User.role_name == 'manager'
     )
 
     if start_date_str:
@@ -431,5 +455,5 @@ def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_
         end_date = date.fromisoformat(end_date_str)
         query = query.filter(func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date) <= end_date)
 
-    ranking = query.group_by(auth_models.SalesManager.id).order_by(func.count(EstateDeal.id).desc()).all()
+    ranking = query.group_by(User.id).order_by(func.count(EstateDeal.id).desc()).all()
     return ranking

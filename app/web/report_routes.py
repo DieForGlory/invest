@@ -5,12 +5,12 @@ from datetime import date, timedelta
 # --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
 from datetime import datetime  # Добавлен timedelta
 from ..core.extensions import db
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file, json
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file, json, g
 from flask import jsonify
 from flask_login import login_required
 from sqlalchemy import or_, extract, func
 from werkzeug.utils import secure_filename
-
+from ..core.db_utils import require_mysql_db
 from app.core.decorators import permission_required
 from app.models import auth_models
 # Импортируем модули вместо классов из удаленных файлов
@@ -33,6 +33,7 @@ report_bp = Blueprint('report', __name__, template_folder='templates')
 @report_bp.route('/manager-kpi-calculate/<int:manager_id>/<int:year>/<int:month>')
 @login_required
 @permission_required('view_manager_report')
+@require_mysql_db
 def calculate_manager_kpi(manager_id, year, month):
     """
     API эндпоинт для расчета KPI менеджера.
@@ -44,7 +45,7 @@ def calculate_manager_kpi(manager_id, year, month):
     plan_income = plan_entry.plan_income if plan_entry else 0.0
 
     # 2. Получаем фактические поступления
-    fact_income_query = db.session.query(func.sum(FinanceOperation.summa)).filter(
+    fact_income_query = g.company_db_session.query(func.sum(FinanceOperation.summa)).filter(
         FinanceOperation.manager_id == manager_id,
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
@@ -307,28 +308,56 @@ def export_plan_fact():
 @report_bp.route('/manager-performance-report', methods=['GET'])
 @login_required
 @permission_required('view_manager_report')
+@require_mysql_db
 def manager_performance_report():
     search_query = request.args.get('q', '')
     show_only_with_plan = request.args.get('with_plan', 'false').lower() == 'true'
 
-    query = auth_models.SalesManager.query
+    # --- НАЧАЛО ИСПРАВЛЕНИЯ И ОТЛАДКИ ---
+
+    # Check if MySQL session is available
+    if not g.mysql_db_session:
+        flash("Невозможно получить данные менеджеров: нет подключения к базе данных MySQL.", "error")
+        return render_template(
+            'reports/manager_performance_overview.html',
+            title="Выполнение планов менеджерами",
+            managers=[],
+            search_query=search_query,
+            show_only_with_plan=show_only_with_plan,
+            today=date.today(),
+            month_names={}
+        )
+
+    # 1. Query managers from users table
+    query = g.mysql_db_session.query(auth_models.SalesManager)
+    query = query.filter(auth_models.SalesManager.is_fired == False)
     if search_query:
-        query = query.filter(auth_models.SalesManager.full_name.ilike(f'%{search_query}%'))
+        query = query.filter(auth_models.SalesManager.users_name.ilike(f'%{search_query}%'))
 
-    managers = query.order_by(auth_models.SalesManager.full_name).all()
+    managers = query.order_by(auth_models.SalesManager.users_name).all()
+    print(f"--- [ОТЛАДКА] 2. Найдено менеджеров в MySQL: {len(managers)}")
+    if managers:
+        print(f"--- [ОТЛАДКА] Пример менеджера: {managers[0].full_name}")
 
-    # --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ ---
     if show_only_with_plan:
-        # 1. Сначала получаем ID всех менеджеров, у которых ВООБЩЕ есть планы, из базы планирования
-        manager_ids_with_plans_query = db.session.query(
+        print("--- [ОТЛАДКА] 3. Фильтр 'Только с планом' активен.")
+        # 2. Запрашиваем ID менеджеров с планами из ЛОКАЛЬНОЙ базы (g.company_db_session)
+        manager_ids_with_plans_query = g.company_db_session.query(
             planning_models.ManagerSalesPlan.manager_id
         ).distinct().all()
+
         manager_ids_with_plans_set = {row[0] for row in manager_ids_with_plans_query}
+        print(f"--- [ОТЛАДКА] 4. Найдено ID менеджеров с планами в SQLite: {len(manager_ids_with_plans_set)}")
+        if manager_ids_with_plans_set:
+            print(f"--- [ОТЛАДКА] Пример ID с планом: {list(manager_ids_with_plans_set)[0]}")
 
-        # 2. Затем фильтруем наш список менеджеров в Python
+        # 3. Фильтруем список менеджеров
+        original_manager_count = len(managers)
         managers = [m for m in managers if m.id in manager_ids_with_plans_set]
+        print(f"--- [ОТЛАДКА] 5. Менеджеров после фильтрации: {len(managers)} (было {original_manager_count})")
 
-    # Готовим данные для модального окна (как в прошлый раз)
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ И ОТЛАДКИ ---
+
     today = date.today()
     month_names = {
         1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь',
@@ -349,6 +378,7 @@ def manager_performance_report():
 @report_bp.route('/download-kpi-report')
 @login_required
 @permission_required('download_kpi_report')
+@require_mysql_db
 def download_kpi_report():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -376,6 +406,7 @@ def download_kpi_report():
 @report_bp.route('/manager-performance-report/<int:manager_id>', methods=['GET'])
 @login_required
 @permission_required('view_manager_report')
+@require_mysql_db
 def manager_performance_detail(manager_id):
     current_year = date.today().year
     year = request.args.get('year', current_year, type=int)
@@ -410,6 +441,7 @@ def manager_performance_detail(manager_id):
 @report_bp.route('/upload-manager-plan', methods=['GET', 'POST'])
 @login_required
 @permission_required('upload_data')
+@require_mysql_db
 def upload_manager_plan():
     form = UploadManagerPlanForm()
     if form.validate_on_submit():
@@ -431,6 +463,7 @@ def upload_manager_plan():
 @report_bp.route('/download-manager-plan-template')
 @login_required
 @permission_required('upload_data')
+@require_mysql_db
 def download_manager_plan_template():
     excel_stream = manager_report_service.generate_manager_plan_template_excel()
     filename = f"manager_plans_template_{date.today().year}.xlsx"
@@ -447,6 +480,7 @@ def download_manager_plan_template():
 @report_bp.route('/hall-of-fame/<path:complex_name>')
 @login_required
 @permission_required('view_manager_report')
+@require_mysql_db
 def hall_of_fame(complex_name):
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')

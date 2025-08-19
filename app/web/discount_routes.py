@@ -31,8 +31,15 @@ discount_bp = Blueprint('discount', __name__, template_folder='templates')
 @permission_required('view_discounts')
 def discounts_overview():
     # Сервис get_discounts_with_summary сам должен быть обновлен для работы с planning_models
-    discounts_data = get_discounts_with_summary()
-    return render_template('discounts/discounts.html', title="Система скидок", structured_discounts=discounts_data)
+    try:
+        discounts_data = get_discounts_with_summary()
+        if not discounts_data:
+            print("[DISCOUNT ROUTES] ⚠️ Сервис get_discounts_with_summary вернул пустые данные")
+        return render_template('discounts/discounts.html', title="Система скидок", structured_discounts=discounts_data)
+    except Exception as e:
+        print(f"[DISCOUNT ROUTES] ❌ Ошибка при получении данных о скидках: {e}")
+        flash('Произошла ошибка при загрузке данных о скидках.', 'danger')
+        return render_template('discounts/discounts.html', title="Система скидок", structured_discounts={})
 
 
 @discount_bp.route('/download-template')
@@ -62,10 +69,20 @@ def upload_discounts():
         f.save(file_path)
 
         try:
+            print(f"[DISCOUNT ROUTES] ⚙️ Начало процесса загрузки файла: {filename}")
             comment = f"Загрузка из файла: {filename}"
+            
+            # 1. Создание версии
             new_version = discount_service.create_blank_version(comment=comment)
+            print(f"[DISCOUNT ROUTES] ✅ Создана новая версия №{new_version.version_number} (ID: {new_version.id})")
+            
+            # 2. Обработка данных из Excel
             result_message = process_discounts_from_excel(file_path, new_version.id)
+            print(f"[DISCOUNT ROUTES] ✅ Данные из Excel обработаны: {result_message}")
+            
+            # 3. Активация версии
             email_data = activate_version(new_version.id)
+            print(f"[DISCOUNT ROUTES] ✅ Версия №{new_version.version_number} активирована")
 
             if email_data:
                 send_email(email_data['subject'], email_data['html_body'])
@@ -100,12 +117,15 @@ def versions_index():
 @login_required
 @permission_required('view_version_history')
 def view_version(version_id):
-    version = planning_models.DiscountVersion.query.get_or_404(version_id)
-    discounts = planning_models.Discount.query.filter_by(version_id=version_id).order_by(
+    version = db.session.query(planning_models.DiscountVersion).get_or_404(version_id)
+    discounts = db.session.query(planning_models.Discount).filter_by(version_id=version_id).order_by(
         planning_models.Discount.complex_name,
         planning_models.Discount.property_type,
         planning_models.Discount.payment_method
     ).all()
+    
+    if not discounts:
+        print(f"[DISCOUNT ROUTES] ⚠️ Для версии {version_id} не найдены скидки")
     return render_template(
         'discounts/view_version.html',
         version=version,
@@ -157,7 +177,7 @@ def edit_version(version_id):
 @login_required
 @permission_required('manage_discounts')
 def create_draft_version():
-    active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    active_version = db.session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         flash('Не найдена активная версия для создания черновика.', 'danger')
         return redirect(url_for('discount.versions_index'))

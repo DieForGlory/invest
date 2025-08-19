@@ -32,9 +32,7 @@ FROM estate_sells LEFT OUTER JOIN estate_houses AS estate_houses_1 ON estate_hou
     <last-used-providers />
   </component>
   <component name="DBNavigator.Project.DatabaseFileManager">
-    <open-files>
-      <object connection-id="6f935e09-3b24-412a-affa-bd2420038ab4" object-ref="consoles/Connection" />
-    </open-files>
+    <open-files />
   </component>
   <component name="DBNavigator.Project.DatabaseSessionManager">
     <connection id="6f935e09-3b24-412a-affa-bd2420038ab4" />

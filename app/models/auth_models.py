@@ -49,7 +49,7 @@ class Permission(db.Model):
 
 
 class User(db.Model, UserMixin):
-    __tablename__ = 'users'
+    __tablename__ = 'system_users'  # Changed to avoid conflict with sales managers table
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
     full_name = db.Column(db.String(120), nullable=False)
@@ -57,8 +57,17 @@ class User(db.Model, UserMixin):
     phone_number = db.Column(db.String(20), nullable=True)
     password_hash = db.Column(db.String(256))
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
+    post_title = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
     # --- СВЯЗЬ ПОЛЬЗОВАТЕЛЯ С КОМПАНИЕЙ ---
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+
+    # Add discriminator column for model inheritance
+    user_type = db.Column(db.String(50))
+    __mapper_args__ = {
+        'polymorphic_identity': 'user',
+        'polymorphic_on': user_type
+    }
 
     role = db.relationship('Role', back_populates='users')
     company = db.relationship('Company', back_populates='users')
@@ -77,16 +86,33 @@ class User(db.Model, UserMixin):
 class EmailRecipient(db.Model):
     __tablename__ = 'email_recipients'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('system_users.id'), nullable=False, unique=True)
     user = db.relationship('User')
 
 class SalesManager(db.Model):
-    __tablename__ = 'sales_managers'
+    __tablename__ = 'users'  # This is the actual sales managers table
     id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(255), unique=True, nullable=False)
+    users_name = db.Column(db.String(255), nullable=False)
     post_title = db.Column(db.String(255), nullable=True)
+    is_fired = db.Column(db.Boolean, default=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
+    
+    company = db.relationship('Company')
+    
+    @property
+    def full_name(self):
+        return self.users_name
+    
+    @property
+    def is_active(self):
+        return not self.is_fired
+    
     def __repr__(self):
         return f'<SalesManager {self.full_name}>'
+
+    @property
+    def is_fired(self):
+        return not self.is_active
 
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),

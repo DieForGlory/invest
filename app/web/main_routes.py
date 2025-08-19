@@ -2,8 +2,8 @@
 
 
 from datetime import datetime
-from flask import session
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app,json
+from flask import session, g
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, json
 from flask import abort
 from flask_login import login_required, current_user
 from flask_babel import gettext as _
@@ -253,8 +253,28 @@ def manage_exclusions():
         return redirect(url_for('main.manage_exclusions'))
 
     excluded_sells = ExcludedSell.query.order_by(ExcludedSell.created_at.desc()).all()
-    all_complexes = db.session.query(EstateHouse.complex_name).distinct().order_by(EstateHouse.complex_name).all()
-    excluded_complexes_names = {c.complex_name for c in settings_service.get_all_excluded_complexes()}
+    # Получаем все уникальные названия ЖК
+    try:
+        # Проверяем наличие MySQL сессии
+        if not hasattr(g, 'mysql_db_session') or not g.mysql_db_session:
+            print("[MAIN ROUTES] ❌ MySQL сессия недоступна")
+            all_complexes = []
+        else:
+            # Используем g.mysql_db_session для доступа к данным внешней БД
+            all_complexes = g.mysql_db_session.query(EstateHouse.complex_name).distinct().order_by(EstateHouse.complex_name).all()
+            print(f"[MAIN ROUTES] ✅ Успешно получены {len(all_complexes)} ЖК")
+    except Exception as e:
+        print(f"[MAIN ROUTES] ❌ Ошибка при получении списка ЖК: {e}")
+        all_complexes = []
+
+    # Получаем список исключенных ЖК
+    try:
+        excluded_complexes = settings_service.get_all_excluded_complexes()
+        excluded_complexes_names = {c.complex_name for c in excluded_complexes}
+        print(f"[MAIN ROUTES] ✅ Получено {len(excluded_complexes)} исключенных ЖК")
+    except Exception as e:
+        print(f"[MAIN ROUTES] ❌ Ошибка при получении исключенных ЖК: {e}")
+        excluded_complexes_names = set()
 
     return render_template(
         'settings/manage_exclusions.html',
