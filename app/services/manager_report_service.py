@@ -80,22 +80,31 @@ def process_manager_plans_from_excel(file_path: str):
 
 @require_mysql_db
 def get_manager_performance_details(manager_id: int, year: int):
-    sold_statuses = current_user.company.sale_statuses
     """
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
-    ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
+    ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА. (С ОТЛАДКОЙ)
     """
+    print("\n" + "=" * 50)
+    print(f"[MANAGER_PERFORMANCE] 🏁 Старт сбора данных для менеджера ID: {manager_id}, Год: {year}")
+
+    sold_statuses = current_user.company.sale_statuses
+    print(f"[MANAGER_PERFORMANCE] ✅ Используются статусы для ФАКТА ПРОДАЖ: {sold_statuses}")
+
     # ИСПРАВЛЕНО: Используем auth_models.SalesManager для поиска менеджера
     manager = g.mysql_db_session.query(auth_models.SalesManager).filter(
         auth_models.SalesManager.id == manager_id
     ).first()
     if not manager:
+        print(f"[MANAGER_PERFORMANCE] ❌ Менеджер с ID {manager_id} не найден в базе MySQL.")
+        print("=" * 50 + "\n")
         return None
+    print(f"[MANAGER_PERFORMANCE] ✅ Найден менеджер: {manager.users_name}")
 
     # ИСПРАВЛЕНО: Используем g.company_db_session для чтения планов
     plans_query = g.company_db_session.query(planning_models.ManagerSalesPlan).filter_by(manager_id=manager_id,
                                                                                          year=year).all()
     plan_data = {p.month: p for p in plans_query}
+    print(f"[MANAGER_PERFORMANCE] 📚 Найдены планы для {len(plan_data)} месяцев в локальной базе.")
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
     fact_volume_query = g.mysql_db_session.query(
@@ -106,7 +115,9 @@ def get_manager_performance_details(manager_id: int, year: int):
         extract('year', effective_date) == year,
         EstateDeal.deal_status_name.in_(sold_statuses)
     ).group_by('month').all()
+    print(f"[MANAGER_PERFORMANCE] 📥 SQL-запрос по ФАКТУ ОБЪЕМА ВЕРНУЛ {len(fact_volume_query)} строк.")
     fact_volume_data = {row.month: row.fact_volume or 0 for row in fact_volume_query}
+    print(f"[MANAGER_PERFORMANCE] 👉 Обработанные данные по ФАКТУ ОБЪЕМА: {fact_volume_data}")
 
     fact_income_query = g.mysql_db_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
@@ -120,9 +131,12 @@ def get_manager_performance_details(manager_id: int, year: int):
             FinanceOperation.payment_type.is_(None)
         )
     ).group_by('month').all()
+    print(f"[MANAGER_PERFORMANCE] 📥 SQL-запрос по ФАКТУ ПОСТУПЛЕНИЙ ВЕРНУЛ {len(fact_income_query)} строк.")
     fact_income_data = {row.month: row.fact_income or 0 for row in fact_income_query}
+    print(f"[MANAGER_PERFORMANCE] 👉 Обработанные данные по ФАКТУ ПОСТУПЛЕНИЙ: {fact_income_data}")
 
     report = []
+    print("[MANAGER_PERFORMANCE] 🔄 Начало формирования отчета по месяцам...")
     for month_num in range(1, 13):
         plan = plan_data.get(month_num)
         fact_volume = fact_volume_data.get(month_num, 0)
@@ -130,6 +144,10 @@ def get_manager_performance_details(manager_id: int, year: int):
         plan_income = plan.plan_income if plan else 0.0
 
         kpi_bonus = calculate_manager_kpi(plan_income, fact_income)
+
+        # Логируем данные за каждый месяц
+        print(
+            f"  [Месяц {month_num:02d}] План поступлений: {plan_income}, Факт поступлений: {fact_income}, Факт объем: {fact_volume}")
 
         report.append({
             'month': month_num,
@@ -141,8 +159,13 @@ def get_manager_performance_details(manager_id: int, year: int):
             'income_percent': (fact_income / plan_income * 100) if (plan and plan_income > 0) else 0,
             'kpi_bonus': kpi_bonus
         })
+
+    final_report = {'manager_id': manager_id, 'manager_name': manager.users_name, 'performance': report}
+    print("[MANAGER_PERFORMANCE] ✅ Отчет успешно сформирован.")
+    print("=" * 50 + "\n")
+
     # ИСПРАВЛЕНО: Обращаемся к правильному полю users_name
-    return {'manager_id': manager_id, 'manager_name': manager.users_name, 'performance': report}
+    return final_report
 
 
 @require_mysql_db
