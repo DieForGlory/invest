@@ -10,6 +10,20 @@ from ..models import auth_models
 from flask_babel import lazy_gettext as _
 
 
+class DealStatusSettingsForm(FlaskForm):
+    """Форма для настройки статусов сделок и остатков."""
+    deal_statuses = SelectMultipleField(
+        'Статусы для учета в ПРОДАЖАХ',
+        coerce=str,
+        widget=CheckboxInput()
+    )
+    inventory_statuses = SelectMultipleField(
+        'Статусы для учета в ОСТАТКАХ',
+        coerce=str,
+        widget=CheckboxInput()
+    )
+    submit = SubmitField('Сохранить настройки')
+
 class CreateCompanyForm(FlaskForm):
     """Форма для создания новой компании (суперадмином)."""
     name = StringField('Название компании', validators=[DataRequired(), Length(min=3, max=120)])

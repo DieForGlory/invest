@@ -4,14 +4,12 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required
 from app.core.decorators import permission_required
 from app.services import settings_service
-from .forms import CalculatorSettingsForm
+from .forms import CalculatorSettingsForm, DealStatusSettingsForm
 from ..core.extensions import db
-from ..models.estate_models import EstateHouse
-
-# --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-# Импортируем модуль auth_models
 from ..models import auth_models
-
+from ..models.estate_models import EstateHouse
+from ..services import data_service
+from flask_login import current_user
 settings_bp = Blueprint('settings', __name__, template_folder='templates')
 
 @settings_bp.route('/calculator-settings', methods=['GET', 'POST'])
@@ -35,6 +33,38 @@ def manage_settings():
         form.standard_installment_min_dp_percent.data = settings.standard_installment_min_dp_percent
 
     return render_template('settings/calculator_settings.html', title="Настройки калькуляторов", form=form)
+
+
+@settings_bp.route('/deal-status-settings', methods=['GET', 'POST'])
+@login_required
+@permission_required('manage_settings')
+def deal_status_settings():
+    """Страница для управления статусами сделок и остатков."""
+    form = DealStatusSettingsForm()
+
+    # Получаем два РАЗНЫХ списка статусов
+    all_deal_statuses = data_service.get_all_deal_statuses()
+    all_sell_statuses = data_service.get_all_sell_statuses()
+
+    form.deal_statuses.choices = [(s, s) for s in all_deal_statuses]
+    form.inventory_statuses.choices = [(s, s) for s in all_sell_statuses]
+
+    if form.validate_on_submit():
+        current_user.company.deal_statuses = ','.join(form.deal_statuses.data)
+        current_user.company.inventory_statuses = ','.join(form.inventory_statuses.data)
+        db.session.commit()
+        flash('Настройки статусов успешно обновлены.', 'success')
+        return redirect(url_for('settings.deal_status_settings'))
+
+    if request.method == 'GET':
+        form.deal_statuses.data = current_user.company.sale_statuses
+        form.inventory_statuses.data = current_user.company.inventory_status_list
+
+    return render_template(
+        'settings/deal_status_settings.html',
+        title="Настройки статусов",
+        form=form
+    )
 
 @settings_bp.route('/manage-inventory-exclusions', methods=['GET', 'POST'])
 @login_required

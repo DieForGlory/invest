@@ -10,6 +10,7 @@ import io
 from flask import g
 from app.core.extensions import db
 from ..core.db_utils import require_mysql_db
+from flask_login import current_user
 
 # Обновленные импорты
 from app.models import auth_models
@@ -79,6 +80,7 @@ def process_manager_plans_from_excel(file_path: str):
 
 @require_mysql_db
 def get_manager_performance_details(manager_id: int, year: int):
+    sold_statuses = current_user.company.sale_statuses
     """
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
     ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
@@ -102,7 +104,7 @@ def get_manager_performance_details(manager_id: int, year: int):
     ).filter(
         EstateDeal.deal_manager_id == manager_id,
         extract('year', effective_date) == year,
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"])
+        EstateDeal.deal_status_name.in_(sold_statuses)
     ).group_by('month').all()
     fact_volume_data = {row.month: row.fact_volume or 0 for row in fact_volume_query}
 
@@ -304,6 +306,7 @@ def generate_kpi_report_excel(year: int, month: int):
 
 @require_mysql_db
 def get_manager_kpis(manager_id: int, year: int):
+    sold_statuses = current_user.company.sale_statuses
     """
     Рассчитывает расширенные KPI для одного менеджера на основе ПОСТУПЛЕНИЙ.
     """
@@ -312,14 +315,14 @@ def get_manager_kpis(manager_id: int, year: int):
     ).join(EstateSell, EstateHouse.sells).join(EstateDeal, EstateSell.deals) \
         .filter(
         EstateDeal.deal_manager_id == manager_id,
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"])
+        EstateDeal.deal_status_name.in_(sold_statuses)
     ).group_by(EstateHouse.complex_name).order_by(func.count(EstateDeal.id).desc()).first()
 
     units_by_type_query = g.mysql_db_session.query(
         EstateSell.estate_sell_category, func.count(EstateDeal.id).label('unit_count')
     ).join(EstateDeal, EstateSell.deals).filter(
         EstateDeal.deal_manager_id == manager_id,
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"])
+        EstateDeal.deal_status_name.in_(sold_statuses)
     ).group_by(EstateSell.estate_sell_category).all()
 
     best_year_income_query = g.mysql_db_session.query(
@@ -401,6 +404,7 @@ def get_manager_complex_ranking(manager_id: int):
 
 @require_mysql_db
 def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_date_str: str = None):
+    sold_statuses = current_user.company.sale_statuses
     """
     Возвращает рейтинг менеджеров по количеству и объему сделок для ЖК.
     """

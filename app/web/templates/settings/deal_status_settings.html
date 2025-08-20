@@ -1,0 +1,48 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<h1 class="mb-4">{{ title }}</h1>
+
+<div class="card card-glass">
+    <div class="card-body">
+        <p class="text-muted">Отметьте статусы, которые должны использоваться в отчетах. Списки формируются на основе уникальных значений из вашей базы данных.</p>
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <h5 class="mt-4">{{ form.deal_statuses.label }}</h5>
+            <p class="form-text">Эти статусы будут считаться "Продажей" в отчетах по выполнению планов, аналитике по менеджерам и т.д.</p>
+            <hr>
+            <div class="mb-3">
+                <div class="row">
+                    {% for value, label in form.deal_statuses.choices %}
+                    <div class="col-md-4">
+                        <div class="form-check form-switch mb-2 fs-5">
+                            <input class="form-check-input" type="checkbox" name="deal_statuses" value="{{ value }}" id="deal-status-{{ loop.index }}" {% if value in form.deal_statuses.data %}checked{% endif %}>
+                            <label class="form-check-label" for="deal-status-{{ loop.index }}">{{ label }}</label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <h5 class="mt-5">{{ form.inventory_statuses.label }}</h5>
+            <p class="form-text">Объекты с этими статусами будут попадать в отчет по "Остаткам" и в "Систему подбора".</p>
+            <hr>
+            <div class="mb-3">
+                <div class="row">
+                    {% for value, label in form.inventory_statuses.choices %}
+                    <div class="col-md-4">
+                        <div class="form-check form-switch mb-2 fs-5">
+                            <input class="form-check-input" type="checkbox" name="inventory_statuses" value="{{ value }}" id="inventory-status-{{ loop.index }}" {% if value in form.inventory_statuses.data %}checked{% endif %}>
+                            <label class="form-check-label" for="inventory-status-{{ loop.index }}">{{ label }}</label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {{ form.submit(class="btn btn-primary mt-3 w-100") }}
+        </form>
+    </div>
+</div>
+{% endblock %}

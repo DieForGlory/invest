@@ -3,6 +3,8 @@
 import json
 import copy
 from datetime import date, datetime
+
+from flask_login import current_user
 from sqlalchemy.orm import joinedload
 from flask import g, render_template_string
 import requests
@@ -166,7 +168,7 @@ def get_discounts_with_summary():
         if s.house: sells_by_complex.setdefault(s.house.complex_name, []).append(s)
 
     final_data = {}
-    valid_statuses = ["Маркетинговый резерв", "Подбор"]
+    valid_statuses = current_user.company.inventory_status_list
     tag_fields = {'kd': 'КД', 'opt': 'ОПТ', 'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер'}
     all_complex_names = sorted(list(discounts_map.keys()))
 

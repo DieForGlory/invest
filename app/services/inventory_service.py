@@ -5,7 +5,7 @@ from collections import defaultdict
 
 import pandas as pd
 from flask import g
-
+from flask_login import current_user
 from app.core.extensions import db
 from app.models.estate_models import EstateSell, EstateHouse
 from app.models.exclusion_models import ExcludedComplex
@@ -33,7 +33,7 @@ def get_inventory_summary_data():
         if d.payment_method == PaymentMethod.FULL_PAYMENT
     }
 
-    valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
+    valid_statuses = current_user.company.inventory_status_list
     # ИСПРАВЛЕНИЕ: Запрос к g.mysql_db_session
     unsold_sells_query = g.mysql_db_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)

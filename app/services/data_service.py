@@ -1,11 +1,13 @@
 # app/services/data_service.py
 
-from app.models.estate_models import EstateSell, EstateHouse
-from app.core.extensions import db
-import time
-from sqlalchemy import distinct
-from flask import g
 import math
+import time
+
+from flask import g
+from sqlalchemy import distinct
+
+from app.models.estate_models import EstateSell, EstateHouse
+from ..models.estate_models import EstateDeal, EstateSell
 
 
 # --- НОВЫЙ КЛАСС ДЛЯ ПАГИНАЦИИ ---
@@ -59,8 +61,29 @@ class ManualPagination:
                     yield None
                 yield num
                 last = num
-
-
+def get_all_sell_statuses():
+    """Возвращает список уникальных статусов ОБЪЕКТОВ (sells) из MySQL."""
+    try:
+        if not hasattr(g, 'mysql_db_session') or g.mysql_db_session is None:
+            return []
+        results = g.mysql_db_session.query(distinct(EstateSell.estate_sell_status_name)).filter(EstateSell.estate_sell_status_name.isnot(None)).all()
+        statuses = [row[0] for row in results if row[0]]
+        return sorted(statuses)
+    except Exception as e:
+        print(f"[DEBUG] ❌ КРИТИЧЕСКАЯ ОШИБКА в get_all_sell_statuses: {e}")
+        return []
+def get_all_deal_statuses():
+    """Возвращает список уникальных статусов сделок из MySQL."""
+    try:
+        if not hasattr(g, 'mysql_db_session') or g.mysql_db_session is None:
+            return []
+        # Запрос на получение уникальных, непустых значений
+        results = g.mysql_db_session.query(distinct(EstateDeal.deal_status_name)).filter(EstateDeal.deal_status_name.isnot(None)).all()
+        statuses = [row[0] for row in results if row[0]]
+        return sorted(statuses)
+    except Exception as e:
+        print(f"[DEBUG] ❌ КРИТИЧЕСКАЯ ОШИБКА в get_all_deal_statuses: {e}")
+        return []
 def get_sells_with_house_info(page, per_page):
     """
     Получает предложения о продаже для конкретной страницы из MySQL.

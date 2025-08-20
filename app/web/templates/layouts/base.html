@@ -75,6 +75,7 @@
                                     <li><a class="dropdown-item" href="{{ url_for('auth.user_management') }}">{{ _('Пользователи') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('settings.manage_email_recipients') }}">{{ _('Получатели уведомлений') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('settings.manage_settings') }}">{{ _('Настройки калькуляторов') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('settings.deal_status_settings') }}">Настройки статусов сделок</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.currency_settings') }}">{{ _('Настройки курса') }}</a></li>
                                     {% endif %}
                                     {% if current_user.can('manage_specials') %}

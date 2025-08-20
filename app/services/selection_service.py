@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 from ..core.extensions import db
 import json
 from datetime import date
-
+from flask_login import current_user
 # --- ИЗМЕНЕНИЯ ЗДЕСЬ: Обновляем импорты ---
 from ..models.estate_models import EstateHouse, EstateSell
 from ..models import planning_models
@@ -13,7 +13,6 @@ from ..models.exclusion_models import ExcludedSell
 # --- ДОБАВЛЕН ИМПОРТ СЕРВИСА ВАЛЮТ ---
 from . import currency_service
 
-VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
 DEDUCTION_AMOUNT = 3_000_000
 MAX_MORTGAGE = 420_000_000
 MIN_INITIAL_PAYMENT_PERCENT = 0.15
@@ -30,7 +29,7 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
         raise ValueError("Не удалось получить актуальный курс валют из настроек.")
 
     budget_uzs = budget * usd_rate if currency.upper() == 'USD' else budget
-
+    valid_statuses = current_user.company.inventory_status_list
     print(f"\n[SELECTION_SERVICE] 🔎 Поиск. Бюджет: {budget} {currency}. Тип: {property_type_str}")
 
     # Используем planning_models
@@ -53,7 +52,7 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
         joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_sell_category == property_type_enum.name,
-        EstateSell.estate_sell_status_name.in_(VALID_STATUSES),
+        EstateSell.estate_sell_status_name.in_(valid_statuses),
         EstateSell.estate_price.isnot(None),
         EstateSell.estate_price > DEDUCTION_AMOUNT,
         EstateSell.id.notin_(excluded_sell_ids) if excluded_sell_ids else True

@@ -16,7 +16,21 @@ class Company(db.Model):
     db_uri = db.Column(db.String(255), nullable=False)
     # Для фактических данных (MySQL, read-only)
     mysql_db_uri = db.Column(db.String(255), nullable=True)
+    deal_statuses = db.Column(db.String(500), nullable=True, default='Сделка в работе,Сделка проведена')
+    inventory_statuses = db.Column(db.String(500), nullable=True, default='Маркетинговый резерв,Подбор,Бронь')
 
+    @property
+    def inventory_status_list(self):
+        if self.inventory_statuses:
+            return [status.strip() for status in self.inventory_statuses.split(',')]
+        return ['Маркетинговый резерв', 'Подбор', 'Бронь']
+
+    @property
+    def sale_statuses(self):
+        if self.deal_statuses:
+            return [status.strip() for status in self.deal_statuses.split(',')]
+        # Значение по умолчанию, если ничего не настроено
+        return ['Сделка в работе', 'Сделка проведена']
     # --- Настройки почты ---
     mail_server = db.Column(db.String(120), default='mail.gh.uz')
     mail_port = db.Column(db.Integer, default=587)

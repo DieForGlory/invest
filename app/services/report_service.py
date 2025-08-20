@@ -6,7 +6,7 @@ from sqlalchemy import func, extract, case
 from flask import g
 import io
 from collections import defaultdict
-
+from flask_login import current_user
 from app.models import planning_models
 from .data_service import get_all_complex_names
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
@@ -148,6 +148,7 @@ def generate_ids_excel(ids_str: str):
 def get_fact_data(year: int, month: int, property_type: str):
     """Собирает фактические данные о продажах из MySQL."""
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    sold_statuses = current_user.company.sale_statuses
     query = g.mysql_db_session.query(
         EstateHouse.complex_name,
         func.count(EstateDeal.id).label('fact_units')
@@ -156,7 +157,7 @@ def get_fact_data(year: int, month: int, property_type: str):
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
     ).filter(
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
+        EstateDeal.deal_status_name.in_(sold_statuses),
         effective_date.isnot(None),
         extract('year', effective_date) == year,
         extract('month', effective_date) == month,
@@ -359,11 +360,12 @@ def get_monthly_summary_by_property_type(year: int, month: int):
 def get_fact_volume_data(year: int, month: int, property_type: str):
     """Собирает фактические данные об объеме контрактации из MySQL."""
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    sold_statuses = current_user.company.sale_statuses
     results = g.mysql_db_session.query(
         EstateHouse.complex_name, func.sum(EstateDeal.deal_sum).label('fact_volume')
     ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id).join(EstateHouse,
                                                                         EstateSell.house_id == EstateHouse.id).filter(
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
+        EstateDeal.deal_status_name.in_(sold_statuses),
         effective_date.isnot(None),
         extract('year', effective_date) == year,
         extract('month', effective_date) == month,
