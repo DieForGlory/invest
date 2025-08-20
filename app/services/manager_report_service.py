@@ -125,7 +125,7 @@ def get_manager_performance_details(manager_id: int, year: int):
     ).filter(
         FinanceOperation.manager_id == manager_id,
         extract('year', FinanceOperation.date_added) == year,
-        FinanceOperation.status_name == "Проведено",
+        FinanceOperation.status_name == "Paid",
         or_(
             FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
             FinanceOperation.payment_type.is_(None)
@@ -256,7 +256,7 @@ def generate_kpi_report_excel(year: int, month: int):
             FinanceOperation.manager_id == manager.id,
             extract('year', FinanceOperation.date_added) == year,
             extract('month', FinanceOperation.date_added) == month,
-            FinanceOperation.status_name == "Проведено",
+            FinanceOperation.status_name == "Paid",
             or_(
                 FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
                 FinanceOperation.payment_type.is_(None)
@@ -353,7 +353,7 @@ def get_manager_kpis(manager_id: int, year: int):
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
         FinanceOperation.manager_id == manager_id,
-        FinanceOperation.status_name == 'Проведено'
+        FinanceOperation.status_name == 'Paid'
     ).group_by('income_year').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     best_month_income_query = g.mysql_db_session.query(
@@ -362,7 +362,7 @@ def get_manager_kpis(manager_id: int, year: int):
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
         FinanceOperation.manager_id == manager_id,
-        FinanceOperation.status_name == 'Проведено'
+        FinanceOperation.status_name == 'Paid'
     ).group_by('income_year', 'income_month').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     best_month_in_year_income_query = g.mysql_db_session.query(
@@ -371,7 +371,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).filter(
         FinanceOperation.manager_id == manager_id,
         extract('year', FinanceOperation.date_added) == year,
-        FinanceOperation.status_name == 'Проведено'
+        FinanceOperation.status_name == 'Paid'
     ).group_by('income_month').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     kpis = {
@@ -417,7 +417,7 @@ def get_manager_complex_ranking(manager_id: int):
         .filter(
         EstateDeal.deal_manager_id == manager_id,
         FinanceOperation.manager_id == manager_id,
-        FinanceOperation.status_name == "Проведено"
+        FinanceOperation.status_name == "Paid"
     ) \
         .group_by(EstateHouse.complex_name) \
         .order_by(func.sum(FinanceOperation.summa).desc()) \

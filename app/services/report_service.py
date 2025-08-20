@@ -76,7 +76,7 @@ def get_fact_income_data(year: int, month: int, property_type: str):
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
-        FinanceOperation.status_name == "Проведено",
+        FinanceOperation.status_name == "Paid",
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
         FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
@@ -460,7 +460,7 @@ def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_
         func.sum(FinanceOperation.summa).label('total')
     ).join(EstateSell).filter(
         EstateSell.house_id == house.id,
-        FinanceOperation.status_name == 'Проведено',
+        FinanceOperation.status_name == 'Paid',
         extract('year', FinanceOperation.date_added) == year
     )
     if property_type_system_name:
@@ -588,7 +588,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     print(f"[КАРТОЧКА] 'Всего законтрактовано': {total_deals_volume:,.0f}")
 
     total_income = g.mysql_db_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).join(EstateHouse).filter(
-        EstateHouse.complex_name == complex_name, FinanceOperation.status_name == 'Проведено'
+        EstateHouse.complex_name == complex_name, FinanceOperation.status_name == 'Paid'
     ).scalar() or 0
     print(f"[КАРТОЧКА] 'Всего поступлений': {total_income:,.0f}")
 
@@ -719,7 +719,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
     income_query = g.mysql_db_session.query(extract('month', FinanceOperation.date_added).label('month'),
                                             func.sum(FinanceOperation.summa).label('total')).join(EstateSell).join(
-        EstateHouse).filter(EstateHouse.complex_name == complex_name, FinanceOperation.status_name == 'Проведено',
+        EstateHouse).filter(EstateHouse.complex_name == complex_name, FinanceOperation.status_name == 'Paid',
                             extract('year', FinanceOperation.date_added) == today.year)
     if property_type_system_name: income_query = income_query.filter(
         EstateSell.estate_sell_category == property_type_system_name)

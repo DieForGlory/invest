@@ -49,7 +49,7 @@ def calculate_manager_kpi(manager_id, year, month):
         FinanceOperation.manager_id == manager_id,
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
-        FinanceOperation.status_name == "Проведено",
+        FinanceOperation.status_name == "Paid",
         or_(
             FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
             FinanceOperation.payment_type.is_(None)
