@@ -122,7 +122,6 @@ def create_app(config_class=DevelopmentConfig):
                 # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: Добавляем опции echo и isolation_level ---
                 mysql_engine = create_engine(
                     company.mysql_db_uri,
-                    echo=True,  # Включаем полное логирование SQL
                     connect_args={"init_command": "SET NAMES utf8mb4"},
                     isolation_level="READ COMMITTED"  # Заставляем читать актуальные данные
                 )
