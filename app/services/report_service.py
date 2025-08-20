@@ -11,7 +11,7 @@ from app.models import planning_models
 from .data_service import get_all_complex_names
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
 from ..models.finance_models import FinanceOperation
-
+import json
 
 def generate_consolidated_report_by_period(year: int, period: str, property_type: str):
     """
@@ -475,6 +475,8 @@ def get_price_dynamics_data(complex_name: str, property_type: str = None):
     Рассчитывает динамику средней фактической цены продажи за м² по месяцам из MySQL.
     """
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    # ИСПРАВЛЕНИЕ: Получаем статусы из настроек компании
+    sold_statuses = current_user.company.sale_statuses
 
     query = g.mysql_db_session.query(
         extract('year', effective_date).label('deal_year'),
@@ -485,7 +487,8 @@ def get_price_dynamics_data(complex_name: str, property_type: str = None):
         .filter(
         effective_date.isnot(None),
         EstateHouse.complex_name == complex_name,
-        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
+        # ИСПРАВЛЕНИЕ: Используем динамический список статусов
+        EstateDeal.deal_status_name.in_(sold_statuses),
         EstateSell.estate_area.isnot(None),
         EstateSell.estate_area > 0,
         EstateDeal.deal_sum.isnot(None),
@@ -564,26 +567,24 @@ def calculate_grand_totals(year, month):
 
 def get_project_dashboard_data(complex_name: str, property_type: str = None):
     """Собирает данные для дашборда, комбинируя SQLite и MySQL."""
-    today = date.today()
-    sold_statuses = ["Сделка в работе", "Сделка проведена"]
+    print("\n" + "=" * 50)
+    print(f"[DEBUG] 🏁 НАЧАЛО СБОРА ДАННЫХ ДЛЯ ДАШБОРДА: '{complex_name}'")
 
-    # --- НАЧАЛО ИСПРАВЛЕНИЯ ---
-    # Определяем переменные для обоих типов названий (русского и системного)
-    # property_type - русское название, используется для планов и отображения
-    # property_type_system_name - системное имя (FLAT, COMM), используется для фактов из MySQL
+    today = date.today()
+    sold_statuses = current_user.company.sale_statuses
+    inventory_statuses = current_user.company.inventory_status_list
+
+    # --- ЛОГ 1: Проверяем, какие статусы мы получили из настроек ---
+    print(f"[DEBUG]  statuses -> sold: {sold_statuses}")
+    print(f"[DEBUG] statuses -> inventory: {inventory_statuses}")
 
     prop_type_map = {member.value: member.name for member in planning_models.PropertyType}
-
-    # Если тип не выбран, по умолчанию используем "Квартира"
     if not property_type:
         property_type = 'Квартира'
-
     property_type_system_name = prop_type_map.get(property_type)
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     houses_in_complex = g.mysql_db_session.query(EstateHouse).filter_by(complex_name=complex_name).order_by(
         EstateHouse.name).all()
-
     active_version = g.company_db_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
 
     houses_data = []
@@ -591,7 +592,6 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         house_details = {"house_name": house.name, "property_types_data": {}}
         for prop_type_enum in planning_models.PropertyType:
             prop_type_value = prop_type_enum.value
-
             total_units = g.mysql_db_session.query(func.count(EstateSell.id)).filter(
                 EstateSell.house_id == house.id, EstateSell.estate_sell_category == prop_type_enum.name
             ).scalar()
@@ -616,7 +616,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
                 unsold_units = g.mysql_db_session.query(EstateSell).filter(
                     EstateSell.house_id == house.id,
                     EstateSell.estate_sell_category == prop_type_enum.name,
-                    EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
+                    EstateSell.estate_sell_status_name.in_(inventory_statuses)
                 ).all()
 
                 prices_per_sqm_list = []
@@ -644,8 +644,24 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     ).scalar() or 0
 
     remainders_by_type = {}
+    print("[DEBUG] 🔄 Расчет KPI-карточек 'Стоимость остатков' и 'Осталось юнитов'...")
     for prop_type_enum in planning_models.PropertyType:
         prop_type_value = prop_type_enum.value
+
+        print(f"[DEBUG]   - Ищем остатки для типа '{prop_type_value}' со статусами: {inventory_statuses}")
+
+        remainder_sells_query = g.mysql_db_session.query(EstateSell).join(EstateHouse).filter(
+            EstateHouse.complex_name == complex_name,
+            EstateSell.estate_sell_category == prop_type_enum.name,
+            EstateSell.estate_sell_status_name.in_(inventory_statuses)
+        )
+
+        unsold_objects = remainder_sells_query.all()
+        print(f"[DEBUG]   - Найдено объектов в остатках: {len(unsold_objects)} шт.")
+
+        if not unsold_objects:
+            continue
+
         total_discount_rate = 0
         if active_version:
             discount = g.company_db_session.query(planning_models.Discount).filter_by(
@@ -657,28 +673,27 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             if discount:
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
 
-        remainder_sells_query = g.mysql_db_session.query(EstateSell).join(EstateHouse).filter(
-            EstateHouse.complex_name == complex_name,
-            EstateSell.estate_sell_category == prop_type_enum.name,
-            EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
-        )
-
         total_discounted_price = 0
         count_remainder = 0
         deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
 
-        for sell in remainder_sells_query.all():
+        for sell in unsold_objects:
             if sell.estate_price and sell.estate_price > deduction_amount:
                 price_after_deduction = sell.estate_price - deduction_amount
                 final_price = price_after_deduction * (1 - total_discount_rate)
                 total_discounted_price += final_price
                 count_remainder += 1
 
+        print(
+            f"[DEBUG]   - Из них валидных для расчета: {count_remainder} шт. с общей стоимостью {total_discounted_price:,.0f} UZS")
+
         if count_remainder > 0:
             remainders_by_type[prop_type_value] = {
                 'total_price': total_discounted_price,
                 'count': count_remainder
             }
+
+    print("[DEBUG] ✅ Расчет KPI-карточек завершен.")
 
     yearly_plan_fact = {
         'labels': [f"{i:02}" for i in range(1, 13)],
@@ -689,7 +704,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     plans_query = g.company_db_session.query(planning_models.SalesPlan).filter_by(complex_name=complex_name,
                                                                                   year=today.year)
     if property_type:
-        plans_query = plans_query.filter_by(property_type=property_type)  # Фильтруем план по русскому названию
+        plans_query = plans_query.filter_by(property_type=property_type)
     for p in plans_query.all():
         yearly_plan_fact['plan_volume'][p.month - 1] += p.plan_volume
         yearly_plan_fact['plan_income'][p.month - 1] += p.plan_income
@@ -705,7 +720,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         effective_date.isnot(None),
         extract('year', effective_date) == today.year
     )
-    if property_type_system_name:  # Фильтруем факт по системному названию
+    if property_type_system_name:
         volume_query = volume_query.filter(EstateSell.estate_sell_category == property_type_system_name)
     for row in volume_query.group_by('month').all():
         fact_volume_by_month[row.month - 1] = row.total or 0
@@ -720,7 +735,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         FinanceOperation.status_name == 'Проведено',
         extract('year', FinanceOperation.date_added) == today.year
     )
-    if property_type_system_name:  # Фильтруем факт по системному названию
+    if property_type_system_name:
         income_query = income_query.filter(EstateSell.estate_sell_category == property_type_system_name)
     for row in income_query.group_by('month').all():
         fact_income_by_month[row.month - 1] = row.total or 0
@@ -748,7 +763,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         base_query = g.mysql_db_session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateDeal.deal_status_name.in_(sold_statuses),
-            EstateSell.estate_sell_category == 'FLAT'  # Прямо указываем системное имя
+            EstateSell.estate_sell_category == 'FLAT'
         )
 
         floor_data = base_query.with_entities(EstateSell.estate_floor, func.count(EstateSell.id)).group_by(
@@ -789,4 +804,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         "recent_deals": recent_deals,
         "houses_data": houses_data,
     }
+
+    print(f"[DEBUG] ✅ ФИНАЛЬНЫЕ ДАННЫЕ ДЛЯ KPI: {json.dumps(remainders_by_type)}")
+    print("=" * 50 + "\n")
     return dashboard_data

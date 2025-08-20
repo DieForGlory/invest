@@ -14,6 +14,9 @@
       <assistant-state connection-id="6f935e09-3b24-412a-affa-bd2420038ab4" default-profile-name="" selected-conversation-id="" assistant-type="GENERIC" availability="UNAVAILABLE" acknowledgement="NONE">
         <conversations />
       </assistant-state>
+      <assistant-state connection-id="f7a511e2-9308-4143-894f-b8925f7c8de7" default-profile-name="" selected-conversation-id="" assistant-type="GENERIC" availability="UNAVAILABLE" acknowledgement="NONE">
+        <conversations />
+      </assistant-state>
     </assistants>
   </component>
   <component name="DBNavigator.Project.DatabaseBrowserManager">
@@ -24,19 +27,17 @@
   </component>
   <component name="DBNavigator.Project.DatabaseConsoleManager">
     <connection id="6f935e09-3b24-412a-affa-bd2420038ab4">
-      <console name="Connection" type="STANDARD" schema="macro_bi_cmp_528" session="Main"><![CDATA[SELECT estate_sells.id AS estate_sells_id, estate_sells.house_id AS estate_sells_house_id, estate_sells.estate_sell_category AS estate_sells_estate_sell_category, estate_sells.estate_floor AS estate_sells_estate_floor, estate_sells.estate_rooms AS estate_sells_estate_rooms, estate_sells.estate_price_m2 AS estate_sells_estate_price_m2, estate_sells.estate_sell_status_name AS estate_sells_estate_sell_status_name, estate_sells.estate_price AS estate_sells_estate_price, estate_sells.estate_area AS estate_sells_estate_area, estate_houses_1.id AS estate_houses_1_id, estate_houses_1.complex_name AS estate_houses_1_complex_name, estate_houses_1.name AS estate_houses_1_name, estate_houses_1.geo_house AS estate_houses_1_geo_house 
+      <console name="Connection" type="STANDARD" schema="macro_bi_cmp_528" session="Main">SELECT estate_sells.id AS estate_sells_id, estate_sells.house_id AS estate_sells_house_id, estate_sells.estate_sell_category AS estate_sells_estate_sell_category, estate_sells.estate_floor AS estate_sells_estate_floor, estate_sells.estate_rooms AS estate_sells_estate_rooms, estate_sells.estate_price_m2 AS estate_sells_estate_price_m2, estate_sells.estate_sell_status_name AS estate_sells_estate_sell_status_name, estate_sells.estate_price AS estate_sells_estate_price, estate_sells.estate_area AS estate_sells_estate_area, estate_houses_1.id AS estate_houses_1_id, estate_houses_1.complex_name AS estate_houses_1_complex_name, estate_houses_1.name AS estate_houses_1_name, estate_houses_1.geo_house AS estate_houses_1_geo_house 
 FROM estate_sells LEFT OUTER JOIN estate_houses AS estate_houses_1 ON estate_houses_1.id = estate_sells.house_id 
 WHERE estate_sells.id = 4656916
-LIMIT 1]]></console>
+LIMIT 1</console>
     </connection>
   </component>
   <component name="DBNavigator.Project.DatabaseEditorStateManager">
     <last-used-providers />
   </component>
   <component name="DBNavigator.Project.DatabaseFileManager">
-    <open-files>
-      <object connection-id="6f935e09-3b24-412a-affa-bd2420038ab4" object-ref="consoles/Connection" />
-    </open-files>
+    <open-files />
   </component>
   <component name="DBNavigator.Project.DatabaseSessionManager">
     <connection id="6f935e09-3b24-412a-affa-bd2420038ab4" />
