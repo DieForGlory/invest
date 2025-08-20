@@ -16,16 +16,25 @@ from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyT
 
 def get_inventory_summary_data():
     """
-    Собирает данные по остаткам и возвращает детализацию и общую сводку. (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+    Собирает данные по остаткам и возвращает детализацию и общую сводку. (ИСПРАВЛЕННАЯ ВЕРСИЯ С ОТЛАДКОЙ)
     """
+    print("\n" + "="*50)
+    print("[ИНВЕНТАРИЗАЦИЯ] 🏁 Старт формирования отчета по остаткам...")
+
     # Получаем список исключенных ЖК из основной БД
-    excluded_complex_names = {c.complex_name for c in db.session.query(ExcludedComplex).all()}
-    print(f"[ИНВЕНТАРИЗАЦИЯ] ✅ Найдено {len(excluded_complex_names)} исключенных ЖК: {', '.join(excluded_complex_names) if excluded_complex_names else 'нет'}")
+    excluded_complex_names = {c.complex_name for c in g.company_db_session.query(ExcludedComplex).all()}
+    print(f"[ИНВЕНТАРИЗАЦИЯ]  exclusionary-complexes: Найдено {len(excluded_complex_names)} ЖК в списке исключений.")
+    if excluded_complex_names:
+        print(f"[ИНВЕНТАРИЗАЦИЯ] ➡️ Список исключенных ЖК: {', '.join(excluded_complex_names)}")
 
     # Получаем активную версию скидок
-    active_version = db.session.query(DiscountVersion).filter_by(is_active=True).first()
+    active_version = g.company_db_session.query(DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
+        print("[ИНВЕНТАРИЗАЦИЯ] ❌ КРИТИЧЕСКАЯ ОШИБКА: Активная версия скидок не найдена. Отчет будет пустым.")
+        print("="*50 + "\n")
         return {}, {}
+    print(f"[ИНВЕНТАРИЗАЦИЯ] ✅ Найдена активная система скидок: Версия №{active_version.version_number} (ID: {active_version.id})")
+
 
     discounts_map = {
         (d.complex_name, d.property_type): d
@@ -34,6 +43,8 @@ def get_inventory_summary_data():
     }
 
     valid_statuses = current_user.company.inventory_status_list
+    print(f"[ИНВЕНТАРИЗАЦИЯ] ✅ Используются следующие статусы для определения остатков: {valid_statuses}")
+
     # ИСПРАВЛЕНИЕ: Запрос к g.mysql_db_session
     unsold_sells_query = g.mysql_db_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)
@@ -45,17 +56,20 @@ def get_inventory_summary_data():
 
     # Применяем исключения ЖК
     if excluded_complex_names:
-        print(f"[ИНВЕНТАРИЗАЦИЯ] ℹ️ Применяю фильтр исключений к запросу")
         unsold_sells_query = unsold_sells_query.join(EstateSell.house).filter(
             EstateHouse.complex_name.notin_(excluded_complex_names)
         )
 
     unsold_sells = unsold_sells_query.all()
+    print(f"[ИНВЕНТАРИЗАЦИЯ] 📥 Из MySQL получено {len(unsold_sells)} объектов со статусами остатков.")
+
 
     summary_by_complex = defaultdict(lambda: defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0
     }))
 
+    print("[ИНВЕНТАРИЗАЦИЯ] 🔄 Начало расчета 'цены дна' для каждого объекта...")
+    processed_count = 0
     for sell in unsold_sells:
         if not sell.house or not sell.house.complex_name:
             continue
@@ -75,11 +89,18 @@ def get_inventory_summary_data():
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
                 bottom_price = price_for_calc * (1 - total_discount_rate)
 
+        if processed_count < 5: # Логируем только первые 5 для примера
+            print(f"  [Пример {processed_count+1}] ID: {sell.id}, ЖК: {complex_name}, Тип: {prop_type_enum.value}, Цена прайса: {sell.estate_price}, Цена дна: {bottom_price:.0f}")
+
         # Используем русское название '.value' для отображения в отчете
         metrics = summary_by_complex[complex_name][prop_type_enum.value]
         metrics['units'] += 1
         metrics['total_area'] += sell.estate_area
         metrics['total_value'] += bottom_price
+        processed_count += 1
+
+    print(f"[ИНВЕНТАРИЗАЦИЯ] ✅ Расчет 'цены дна' завершен для {processed_count} объектов.")
+
 
     overall_summary = defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0
@@ -98,6 +119,11 @@ def get_inventory_summary_data():
     for metrics in overall_summary.values():
         metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area'] if metrics['total_area'] > 0 else 0
 
+    if not summary_by_complex:
+        print("[ИНВЕНТАРИЗАЦИЯ] ⚠️ ПРЕДУПРЕЖДЕНИЕ: Итоговый отчет пуст. Проверьте статусы и наличие активных скидок.")
+
+    print("[ИНВЕНТАРИЗАЦИЯ] ✅ Отчет по остаткам успешно сформирован.")
+    print("="*50 + "\n")
     return summary_by_complex, overall_summary
 
 
